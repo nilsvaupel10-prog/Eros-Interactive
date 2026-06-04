@@ -77,6 +77,16 @@ export default function App() {
     dickSize: 0, // 0 means female default/None
   });
 
+  // Sandbox AI Synthesizer and Startup config states
+  const [charStartingArousals, setCharStartingArousals] = useState<Record<string, number>>({});
+  const [creatorStartingArousal, setCreatorStartingArousal] = useState(20);
+  const [creatorAvatarUrl, setCreatorAvatarUrl] = useState('');
+  const [creatorAvatarPrompt, setCreatorAvatarPrompt] = useState('');
+  const [avatarSynthing, setAvatarSynthing] = useState(false);
+  const [avatarSynthError, setAvatarSynthError] = useState('');
+  const [inlineSynthingId, setInlineSynthingId] = useState<string | null>(null);
+  const [toastNotify, setToastNotify] = useState<{ message: string; isError: boolean } | null>(null);
+
   // Mobile navigation tabs state
   const [activeMobileTab, setActiveMobileTab] = useState<'timeline' | 'dossiers'>('timeline');
 
@@ -160,7 +170,9 @@ export default function App() {
           definition: data.definition || '',
           personality: data.personality || undefined,
           body: data.body || undefined,
-          dickSize: data.dickSize || 0
+          dickSize: data.dickSize || 0,
+          avatarUrl: data.avatarUrl || undefined,
+          startingArousal: data.startingArousal !== undefined ? data.startingArousal : undefined
         });
       });
       
@@ -216,6 +228,16 @@ export default function App() {
 
     return () => unsub();
   }, []);
+
+  // Auto-expire toast notifications after 4 seconds
+  useEffect(() => {
+    if (toastNotify) {
+      const timer = setTimeout(() => {
+        setToastNotify(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastNotify]);
 
   const handleSaveGame = async (name: string) => {
     if (!name.trim()) return;
@@ -307,12 +329,140 @@ export default function App() {
           personality: newChar.personality || null,
           body: newChar.body || null,
           dickSize: newChar.dickSize || 0,
+          avatarUrl: newChar.avatarUrl || null,
+          startingArousal: newChar.startingArousal !== undefined ? newChar.startingArousal : null,
           userId: auth.currentUser.uid,
           createdAt: new Date().toISOString()
         });
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, path);
       }
+    }
+  };
+
+  // Avatar icon rendering helper and handlers
+  const renderCharacterAvatarIcon = (char: CharacterDefinition, sizeClass = "w-6 h-6 text-[9px]") => {
+    if (char.avatarUrl) {
+      return (
+        <img 
+          src={char.avatarUrl} 
+          alt={char.name} 
+          referrerPolicy="no-referrer"
+          className={`${sizeClass.split(' ')[0]} ${sizeClass.split(' ')[1]} rounded-md object-cover border border-zinc-800 shrink-0 shadow-sm`}
+        />
+      );
+    }
+    
+    // Draw a gorgeous geometric neon profile via CSS
+    // Generates a deterministic colored gradient + glowing text-shadow based on the name hash
+    const initials = char.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+    const hash = char.name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+    const hue = (hash * 137.508) % 360;
+    
+    return (
+      <div 
+        className={`${sizeClass} rounded-md border border-zinc-805 flex items-center justify-center font-mono font-black shrink-0 shadow-md select-none`}
+        style={{
+          background: `radial-gradient(circle, hsl(${hue}, 85%, 15%) 0%, #09090b 100%)`,
+          color: `hsl(${hue}, 100%, 75%)`,
+          textShadow: `0 0 6px hsl(${hue}, 100%, 55%)`
+        }}
+      >
+        {initials}
+      </div>
+    );
+  };
+
+  // Generates avatar during creator modal phase
+  const handleGenerateCreatorAvatar = async () => {
+    if (!creatorAvatarPrompt.trim()) {
+      setAvatarSynthError('Please type in a quick portrait prompt first');
+      return;
+    }
+    
+    setAvatarSynthing(true);
+    setAvatarSynthError('');
+    
+    try {
+      const resp = await fetch('/api/generate-avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: creatorAvatarPrompt.trim() })
+      });
+      
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Syntax failure in Gemini synthesis API');
+      
+      setCreatorAvatarUrl(data.imageUrl);
+      setToastNotify({ message: 'Erotic portrait synthesized successfully!', isError: false });
+    } catch (err: any) {
+      console.error(err);
+      const isQuotaExceeded = err.message.includes('429') || err.message.includes('Quota exceeded');
+      setAvatarSynthError(isQuotaExceeded 
+        ? 'Rate limit reached. Please try again in a moment.' 
+        : `Failed to synthesize AI portrait: ${err.message}`);
+      setToastNotify({ 
+        message: isQuotaExceeded 
+          ? 'Rate limit reached. Please wait a minute.' 
+          : 'Offsite portraiting requires a paid API key.', 
+        isError: true 
+      });
+    } finally {
+      setAvatarSynthing(false);
+    }
+  };
+
+  // Handles inline generation for any preset or custom character already on the selector grid
+  const handleTriggerInlineSynthesizeAvatar = async (char: CharacterDefinition) => {
+    setInlineSynthingId(char.id);
+    const lookPrompt = `${char.name}, a detailed adult gaming portrait avatar, ${char.shortDescription || 'gorgeous character'}`;
+    
+    try {
+      const resp = await fetch('/api/generate-avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: lookPrompt })
+      });
+      
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Gemini Model server communication timeout');
+      
+      const updatedChar = { ...char, avatarUrl: data.imageUrl };
+      setAvailableCharacters(prev => {
+        const filtered = prev.filter(c => c.id !== char.id);
+        const updated = [...filtered, updatedChar];
+        const customOnly = updated.filter(c => !defaultCharacters.some(dc => dc.id === c.id));
+        localStorage.setItem('eros_custom_characters', JSON.stringify(customOnly));
+        return updated;
+      });
+
+      if (auth.currentUser && !defaultCharacters.some(dc => dc.id === char.id)) {
+        await setDoc(doc(db, 'users', auth.currentUser.uid, 'customCharacters', char.id), {
+          id: char.id,
+          name: char.name,
+          shortDescription: char.shortDescription || '',
+          definition: char.definition,
+          personality: char.personality || null,
+          body: char.body || null,
+          dickSize: char.dickSize || 0,
+          avatarUrl: data.imageUrl,
+          startingArousal: char.startingArousal !== undefined ? char.startingArousal : 20,
+          userId: auth.currentUser.uid,
+          createdAt: new Date().toISOString()
+        });
+      }
+      setToastNotify({ message: `AI Portraiting for ${char.name} is complete!`, isError: false });
+    } catch (err: any) {
+      console.error(err);
+      const isQuotaExceeded = err.message.includes('429') || err.message.includes('Quota exceeded');
+      setToastNotify({ 
+        message: isQuotaExceeded 
+          ? `Rate limit reached. Try again later for ${char.name}.` 
+          : 'AI requires a valid paid Gemini API key. Standing by with stylish local circle-art!', 
+        isError: true 
+      });
+    } finally {
+      setInlineSynthingId(null);
     }
   };
 
@@ -375,7 +525,9 @@ Behavioral Response Guidelines:
         athleticism: creatorSliders.athleticism,
         curviness: creatorSliders.curviness
       },
-      dickSize: creatorSliders.dickSize
+      dickSize: creatorSliders.dickSize,
+      avatarUrl: creatorAvatarUrl || undefined,
+      startingArousal: creatorStartingArousal
     };
 
     addAndPersistCustomCharacter(newChar);
@@ -384,6 +536,10 @@ Behavioral Response Guidelines:
     setShowCreator(false);
     setCreatorName('');
     setCreatorShort('');
+    setCreatorStartingArousal(20);
+    setCreatorAvatarUrl('');
+    setCreatorAvatarPrompt('');
+    setAvatarSynthError('');
     setCreatorSliders({
       assertiveness: 50,
       sociability: 50,
@@ -861,43 +1017,122 @@ Behavioral Response Guidelines:
                 {availableCharacters.map(char => {
                   const isActive = activeCharacterIds.includes(char.id);
                   const isPOV = playerCharacterId === char.id;
+                  const isSynthingThis = inlineSynthingId === char.id;
+                  const currentStartingArousal = charStartingArousals[char.id] ?? char.startingArousal ?? 20;
+
                   return (
-                    <div key={char.id} className={`p-3 rounded-xl border transition-all duration-200 flex flex-col gap-1.5 ${isActive ? 'bg-zinc-900/50 border-zinc-800' : 'bg-zinc-955/20 border-zinc-900/50 opacity-60'}`}>
-                      <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2.5 cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            className="accent-red-650 rounded bg-zinc-950 border-zinc-805 text-red-600 focus:ring-0 focus:ring-offset-0"
-                            checked={isActive}
-                            onChange={(e) => {
-                              if (e.target.checked && activeCharacterIds.length < 6) {
-                                setActiveCharacterIds(prev => [...prev, char.id]);
-                              } else if (!e.target.checked) {
-                                setActiveCharacterIds(prev => prev.filter(id => id !== char.id));
-                                if (playerCharacterId === char.id) setPlayerCharacterId('3rd_person');
-                              }
-                            }}
-                          />
-                          <span className={`font-display font-bold text-xs ${isActive ? 'text-zinc-150' : 'text-zinc-550'}`}>{char.name}</span>
-                        </label>
+                    <div 
+                      key={char.id} 
+                      className={`p-3 rounded-xl border transition-all duration-300 flex flex-col gap-2 ${
+                        isActive 
+                          ? 'bg-zinc-900/50 border-zinc-800' 
+                          : 'bg-zinc-950/20 border-zinc-900/50 opacity-60 hover:opacity-80'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                            <input 
+                              type="checkbox" 
+                              className="accent-red-650 rounded bg-zinc-950 border-zinc-805 text-red-600 focus:ring-0 focus:ring-offset-0"
+                              checked={isActive}
+                              onChange={(e) => {
+                                if (e.target.checked && activeCharacterIds.length < 6) {
+                                  setActiveCharacterIds(prev => [...prev, char.id]);
+                                  if (charStartingArousals[char.id] === undefined) {
+                                    setCharStartingArousals(prev => ({
+                                      ...prev,
+                                      [char.id]: char.startingArousal ?? 20
+                                    }));
+                                  }
+                                } else if (!e.target.checked) {
+                                  setActiveCharacterIds(prev => prev.filter(id => id !== char.id));
+                                  if (playerCharacterId === char.id) setPlayerCharacterId('3rd_person');
+                                }
+                              }}
+                            />
+                          </label>
+                          
+                          {/* Visual Avatar frame & status */}
+                          <div className="relative shrink-0 select-none">
+                            {isSynthingThis ? (
+                              <div className="w-8 h-8 rounded-md bg-zinc-950 border border-red-500 flex items-center justify-center shadow-sm">
+                                <Sparkles className="w-4 h-4 text-red-500 animate-spin" />
+                              </div>
+                            ) : (
+                              renderCharacterAvatarIcon(char, "w-8 h-8 text-[11px]")
+                            )}
+                          </div>
+
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className={`font-display font-bold text-xs truncate ${isActive ? 'text-zinc-150 font-semibold' : 'text-zinc-550'}`}>
+                              {char.name}
+                            </span>
+                            <span className="text-[8px] text-zinc-500 font-mono tracking-wider font-semibold uppercase leading-none mt-0.5">
+                              {defaultCharacters.some(dc => dc.id === char.id) ? 'PRESET ARCHETYPE' : 'CUSTOM AVATAR'}
+                            </span>
+                          </div>
+                        </div>
                         
-                        {isActive && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* AI portrait gen triggers */}
                           <button
                             type="button"
-                            onClick={() => setPlayerCharacterId(isPOV ? '3rd_person' : char.id)}
-                            className={`text-[9px] font-mono tracking-wider px-2 py-0.5 rounded transition-colors ${
-                              isPOV 
-                                ? 'bg-red-950/60 text-red-400 border border-red-900/40 font-bold' 
-                                : 'bg-zinc-950 hover:bg-zinc-805 text-zinc-500 hover:text-zinc-300 border border-zinc-900'
-                            }`}
+                            title="Generate/Refine Portrait using AI"
+                            onClick={() => handleTriggerInlineSynthesizeAvatar(char)}
+                            disabled={isSynthingThis}
+                            className="w-6 h-6 rounded bg-zinc-950 border border-zinc-850 text-zinc-500 hover:text-red-400 hover:border-red-900/40 flex items-center justify-center transition-all disabled:opacity-40 hover:scale-105 active:scale-95"
                           >
-                            {isPOV ? 'POV Active' : 'Play As'}
+                            <Sparkles className="w-3.5 h-3.5" />
                           </button>
+
+                          {isActive && (
+                            <button
+                              type="button"
+                              onClick={() => setPlayerCharacterId(isPOV ? '3rd_person' : char.id)}
+                              className={`text-[9.5px] font-mono tracking-wider h-6 px-2 rounded transition-all duration-150 ${
+                                isPOV 
+                                  ? 'bg-red-950/60 text-red-400 border border-red-900/40 font-extrabold' 
+                                  : 'bg-zinc-950 hover:bg-zinc-805 text-zinc-500 hover:text-zinc-300 border border-zinc-900'
+                              }`}
+                            >
+                              {isPOV ? 'POV' : 'POV Play'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="pl-6 md:pl-8">
+                        <p className={`text-[11px] leading-relaxed ${isActive ? 'text-zinc-400 font-sans' : 'text-zinc-650'}`}>
+                          {char.shortDescription}
+                        </p>
+                        
+                        {/* Interactive Initial Arousal Configurator */}
+                        {isActive && (
+                          <div className="mt-2 bg-zinc-950/40 p-2.5 rounded-lg border border-zinc-900/40 space-y-1">
+                            <div className="flex justify-between items-center text-[9px]">
+                              <span className="text-zinc-550 font-mono font-bold uppercase tracking-wider">Starting Arousal</span>
+                              <span className="text-red-500 font-mono font-black">{currentStartingArousal}%</span>
+                            </div>
+                            <input 
+                              type="range" min="0" max="100" step="5"
+                              className="w-full accent-red-650 h-1 bg-zinc-900 rounded-lg cursor-pointer transition-colors"
+                              value={currentStartingArousal}
+                              onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setCharStartingArousals(prev => ({ ...prev, [char.id]: val }));
+                              }}
+                            />
+                            <div className="flex justify-between text-[7px] text-zinc-600 font-mono uppercase tracking-widest pt-0.5">
+                              <span>Relaxed</span>
+                              <span>Flushed</span>
+                              <span>Urgent</span>
+                            </div>
+                          </div>
                         )}
                       </div>
-                      <p className={`text-[11px] leading-relaxed pl-6 ${isActive ? 'text-zinc-400 font-sans' : 'text-zinc-650'}`}>{char.shortDescription}</p>
                     </div>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -1115,6 +1350,75 @@ Behavioral Response Guidelines:
                      </div>
 
                      <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 block font-mono border-b border-zinc-855 pb-1 pt-1">Genital Endowments</span>
+
+                      {/* Sandbox Startup Settings */}
+                      <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 block font-mono border-b border-zinc-855 pb-1 pt-1">Sandbox Startup Settings</span>
+                      
+                      <div className="space-y-1 bg-zinc-950/40 border border-zinc-855 p-2.5 rounded-lg mb-2">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-zinc-400 font-medium font-sans">Starting Arousal</span>
+                          <span className="text-red-500 font-mono font-bold">
+                            {creatorStartingArousal}%
+                          </span>
+                        </div>
+                        <input 
+                          type="range" min="0" max="100" step="5"
+                          className="w-full accent-red-650 h-1 bg-zinc-800 rounded-lg cursor-pointer"
+                          value={creatorStartingArousal}
+                          onChange={e => setCreatorStartingArousal(parseInt(e.target.value))}
+                        />
+                        <div className="flex justify-between text-[8px] text-zinc-650 uppercase font-mono tracking-wider font-semibold">
+                          <span>Completely Calm (0%)</span>
+                          <span>Fully Aroused / Sensitive (100%)</span>
+                        </div>
+                      </div>
+
+                      {/* Character Photo Identity */}
+                      <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 block font-mono border-b border-zinc-855 pb-1 pt-2">Character Photo Identity</span>
+                      
+                      <div className="space-y-3 bg-zinc-950/40 border border-zinc-855 p-3 rounded-lg mb-4 text-left">
+                        <div className="flex items-center gap-3">
+                          {creatorAvatarUrl ? (
+                            <img 
+                              src={creatorAvatarUrl} 
+                              alt="Erotic preview" 
+                              className="w-12 h-12 rounded-lg object-cover border border-red-900/50 shadow-md animate-fade-in" 
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-lg border border-dashed border-zinc-800 flex items-center justify-center font-mono font-black text-[10px] text-zinc-600 bg-zinc-950 shadow-inner">
+                              NONE
+                            </div>
+                          )}
+                          
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-wider font-bold leading-none">AI Visual Synthing</div>
+                            <input
+                              type="text"
+                              value={creatorAvatarPrompt}
+                              onChange={(e) => setCreatorAvatarPrompt(e.target.value)}
+                              placeholder="e.g., gorgeous blond fitness model portrait"
+                              className="w-full bg-zinc-950 border border-zinc-850 px-2 py-1.5 text-zinc-200 text-xs rounded-lg outline-none focus:border-red-900 placeholder:text-zinc-700 font-sans"
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleGenerateCreatorAvatar}
+                            disabled={avatarSynthing}
+                            className="flex-1 py-1.5 px-3 bg-red-950/60 hover:bg-red-900/40 border border-red-900/40 text-red-400 disabled:opacity-40 transition-colors rounded-lg text-[10px] uppercase font-mono font-bold tracking-wider flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-red-500 animate-spin" />
+                            {avatarSynthing ? 'Synthesizing...' : 'Gen Portrait with AI'}
+                          </button>
+                        </div>
+                        
+                        {avatarSynthError && (
+                          <div className="text-[10px] text-red-400 font-mono leading-relaxed pt-1 border-t border-zinc-900">{avatarSynthError}</div>
+                        )}
+                      </div>
                      
                      <div className="space-y-1 bg-zinc-950/40 border border-zinc-855 p-2.5 rounded-lg">
                        <div className="flex justify-between text-[10px]">
@@ -1143,7 +1447,7 @@ Behavioral Response Guidelines:
                    disabled={!creatorName.trim()}
                    className="w-full bg-red-650 hover:bg-red-700 text-white font-bold p-3 rounded-xl disabled:opacity-50 transition-colors uppercase font-mono tracking-widest text-xs mt-2"
                  >
-                   Instantiate Character Vector
+                   Instantiate Character Core Vector
                  </button>
               </div>
            </div>
@@ -1674,14 +1978,23 @@ Behavioral Response Guidelines:
                 const matchedBio = availableCharacters.find(c => c.name.toLowerCase() === charState.name.toLowerCase() || charState.name.toLowerCase().includes(c.name.toLowerCase()));
                 return (
                   <div key={idx} className="bg-zinc-900/40 border border-zinc-900/60 p-3 rounded-xl space-y-2 transition-all hover:border-red-950/65 animate-fade-in">
-                    <div className="flex justify-between items-end text-[11px] font-bold uppercase">
+                    <div className="flex items-center gap-2.5 text-[11px] font-bold uppercase">
+                      {matchedBio && (
+                        <div className="shrink-0">
+                          {renderCharacterAvatarIcon(matchedBio, "w-8 h-8 text-[10px]")}
+                        </div>
+                      )}
                       <div className="flex flex-col min-w-0 flex-1">
-                        <span className="text-zinc-200 font-display font-medium truncate">{charState.name}</span>
-                        {matchedBio && (
-                          <span className="text-[9px] text-zinc-500 font-sans italic leading-none mt-0.5 normal-case font-normal truncate">{matchedBio.shortDescription}</span>
+                        <span className="text-zinc-200 font-display font-medium truncate leading-snug">{charState.name}</span>
+                        {matchedBio ? (
+                          <span className="text-[9px] text-zinc-500 font-sans mt-0.5 normal-case font-normal truncate leading-none">{matchedBio.shortDescription}</span>
+                        ) : (
+                          <span className="text-[9px] text-zinc-650 font-mono mt-0.5 lowercase font-normal truncate leading-none">External Agent Vector</span>
                         )}
                       </div>
-                      <span className="text-red-500 font-mono text-[10px] shrink-0">Arousal {charState.arousal}%</span>
+                      <span className="text-red-500 font-mono text-[10px] shrink-0 bg-red-950/20 border border-red-900/10 px-1 py-0.5 rounded">
+                        {charState.arousal}%
+                      </span>
                     </div>
                     
                     <div className="h-1 bg-zinc-950 rounded-full overflow-hidden">
@@ -1707,12 +2020,19 @@ Behavioral Response Guidelines:
               {/* Fallback if no states parsed yet */}
               {(!parsedRecent || !parsedRecent.characterStates) && availableCharacters.filter(c => activeCharacterIds.includes(c.id)).map(char => (
                 <div key={char.id} className="bg-zinc-900/20 border border-zinc-900/30 p-3 rounded-xl space-y-2 opacity-50 grayscale transition-all">
-                  <div className="flex justify-between items-end text-xs font-bold uppercase">
-                    <span className="text-zinc-400 font-display font-medium">{char.name}</span>
-                    <span className="text-zinc-650 font-mono text-[10px]">Arousal --%</span>
+                  <div className="flex items-center gap-2.5 text-xs font-bold uppercase">
+                    <div className="shrink-0">
+                      {renderCharacterAvatarIcon(char, "w-8 h-8 text-[10px]")}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-zinc-400 font-display font-medium truncate block leading-none">{char.name}</span>
+                      <span className="text-[9px] text-zinc-650 font-mono tracking-wide block mt-1">Awaiting sync...</span>
+                    </div>
+                    <span className="text-zinc-600 font-mono text-[10px] shrink-0 border border-zinc-900 px-1 py-0.5 rounded">{char.startingArousal || 0}%</span>
                   </div>
-                  <div className="h-1 bg-zinc-950 rounded-full"></div>
-                  <div className="text-[9px] text-zinc-650 font-mono uppercase tracking-wider">Awaiting telemetry sync...</div>
+                  <div className="h-1 bg-zinc-950 rounded-full overflow-hidden">
+                    <div className="h-full bg-zinc-805" style={{ width: `${char.startingArousal || 0}%` }} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -1951,6 +2271,42 @@ Behavioral Response Guidelines:
               Apply Core Configurations
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Dynamic Toast Notifications */}
+      {toastNotify && (
+        <div key="toast-banner" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none px-4 w-full max-w-sm">
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            className={`pointer-events-auto p-4 rounded-xl border shadow-xl flex items-start gap-3 backdrop-blur-md ${
+              toastNotify.isError 
+                ? 'bg-zinc-950/90 border-red-900/50 text-red-200' 
+                : 'bg-zinc-950/90 border-red-500/30 text-zinc-100'
+            }`}
+          >
+            <div className="shrink-0 pt-0.5">
+              {toastNotify.isError ? (
+                <div className="w-4 h-4 rounded-full bg-red-950 border border-red-500 flex items-center justify-center font-bold text-[9px] text-red-500 font-mono">!</div>
+              ) : (
+                <div className="w-4 h-4 rounded-full bg-red-950 border border-red-500 flex items-center justify-center font-bold text-[9px] text-red-500 font-mono">✓</div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[11px] font-bold uppercase tracking-wider font-mono">
+                {toastNotify.isError ? 'System Warning' : 'Simulation Update'}
+              </div>
+              <p className="text-[12px] text-zinc-400 mt-1 leading-snug">{toastNotify.message}</p>
+            </div>
+            <button 
+              onClick={() => setToastNotify(null)}
+              className="text-zinc-650 hover:text-zinc-400 transition-colors shrink-0 text-xs font-mono font-bold cursor-pointer"
+            >
+              ×
+            </button>
+          </motion.div>
         </div>
       )}
     </div>

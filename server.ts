@@ -112,6 +112,58 @@ async function startServer() {
     }
   });
 
+  // API POST route to handle avatar image generation
+  app.post('/api/generate-avatar', async (req, res) => {
+    try {
+      const { prompt } = req.body;
+      if (!prompt || typeof prompt !== 'string') {
+        return res.status(400).json({ error: 'Prompt description is required and must be a string.' });
+      }
+
+      const ai = getGenAIClient();
+      
+      // We steer the prompt specifically into high-quality stylized cyberpunk anime character avatar photos
+      const refinedPrompt = `${prompt}, high-quality stylized avatar profile vector portrait, focus on close-up face, gorgeous erotica gaming console artwork, isolated clean dark background, dramatic neon glowing accents, polished digital illustration.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: [{ text: refinedPrompt }],
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1"
+          },
+          safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+          ],
+        }
+      });
+
+      let imageUrl: string | null = null;
+      if (response.candidates?.[0]?.content?.parts) {
+        for (const part of response.candidates[0].content.parts) {
+          if (part.inlineData) {
+            imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+            break;
+          }
+        }
+      }
+
+      if (!imageUrl) {
+        throw new Error('Image generation succeeded but no inline image data was returned by the Gemini generator.');
+      }
+
+      return res.json({ imageUrl });
+    } catch (err: any) {
+      console.error('Avatar generation error:', err);
+      return res.status(500).json({ 
+        error: err.message || 'Dynamic avatar generation failed, please make sure your paid Gemini API key is configured with the correct access rights.' 
+      });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

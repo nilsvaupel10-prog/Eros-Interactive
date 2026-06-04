@@ -22,6 +22,8 @@ export interface CharacterDefinition {
   name: string;
   shortDescription: string;
   definition: string;
+  avatarUrl?: string;
+  startingArousal?: number;
   personality?: {
     assertiveness: number; // Submissive (0) to Dominant (100)
     sociability: number;   // Introvert (0) to Extravert (100)

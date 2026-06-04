@@ -2,7 +2,12 @@
  * The system prompt and character definitions provided by the user.
  */
 
-export function generateSystemPrompt(scenarioDescripton: string, characters: {name: string, definition: string}[], playerCharacterId: string, gameMode: 'standard' | 'free_will') {
+export function generateSystemPrompt(
+  scenarioDescripton: string,
+  characters: { name: string; definition: string; startingArousal?: number }[],
+  playerCharacterId: string,
+  gameMode: 'standard' | 'free_will'
+) {
   const charactersText = characters.map(c => c.definition).join('\n\n');
   
   let playerInstruction = '';
@@ -16,6 +21,18 @@ export function generateSystemPrompt(scenarioDescripton: string, characters: {na
   if (gameMode === 'free_will') {
     modeInstruction = 'GAME MODE: Free Will. The non-player characters have absolute free will and must act independently based on their distinct personalities, desires, and current states. They should push the scene forward autonomously, taking initiative.';
   }
+
+  // Inject starting arousal constraints
+  const arousalStatesText = characters.map(c => {
+    const startArousal = c.startingArousal !== undefined ? c.startingArousal : 20;
+    return `- ${c.name}: Starts at exactly ${startArousal}% arousal level.`;
+  }).join('\n');
+
+  const startingArousalPrompt = `
+CORE INITIAL STATE TUNING:
+The following are the exact starting sexual arousal levels for each participant in this scenario. You MUST incorporate these levels immediately in your first narrative response and in your first character state JSON block:
+${arousalStatesText}
+`;
 
   return `SYSTEM PROMPT: EROS INTERACTIVE FRAMEWORK
 
@@ -33,10 +50,10 @@ CORE OPERATING PARAMETERS:
 2. STRUCTURAL CONSTRAINTS (STRICT)
 - Generate exactly 3 narrative paragraph per response (8-10 sentences ideally, maximum 12 per paragraph)
 - Paragraph must advance the scene through action, dialogue, revelation, or sensation. But NEVER rush anything. No timeskips between paragraph, they should match together seamlessly. 
-- Immediately follow the paragraph with six (6) numbered decision options [1] through [6]
+- Immediately follow the paragraph with exactly four (4) numbered decision options [1] through [4]
 - Format choices as: [Number] [Brief evocative description of the action/choice]
-- choice one is the less dirtiest, choice 6 is filthy.
-- choice 7 exists too, it's custom choice.
+- choice one is the less dirtiest, choice 4 is filthy and highly explicit.
+- choice 5 exists too, it's custom choice.
 
 3. INTERACTIVE ARCHITECTURE
 - Treat each choice as a branching path that meaningfully alters the scene's trajectory
@@ -45,6 +62,7 @@ CORE OPERATING PARAMETERS:
 - Maintain continuity—reference previous choices' impacts on character states (arousal, emotional shifts, physical changes)
 ${playerInstruction}
 ${modeInstruction}
+${startingArousalPrompt}
 
 4. STATE TRACKING & TONE MODULATORS
 - Intensity Spectrum: Scale from "teasing/denial" to "primal/urgent" based on narrative context
@@ -84,8 +102,6 @@ What happens next?
 [2] [Choice description]
 [3] [Choice description]
 [4] [Choice description]
-[5] [Choice description]
-[6] [Choice description]
 
 \`\`\`json
 {

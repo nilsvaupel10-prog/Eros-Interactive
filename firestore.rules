@@ -42,8 +42,10 @@ service cloud.firestore {
         && data.userId == request.auth.uid
         && data.name is string && data.name.size() <= 100
         && data.definition is string && data.definition.size() <= 15000
+        && (!data.keys().hasAny(['avatarUrl']) || (data.avatarUrl is string && data.avatarUrl.size() <= 1000000))
+        && (!data.keys().hasAny(['startingArousal']) || (data.startingArousal is int && data.startingArousal >= 0 && data.startingArousal <= 100))
         && data.keys().hasAll(['id', 'name', 'definition', 'userId'])
-        && data.keys().size() <= 8;
+        && data.keys().size() <= 12;
     }
 
     function isValidGameSave(data, saveId) {
@@ -82,7 +84,7 @@ service cloud.firestore {
                       && isValidCustomCharacter(incoming(), characterId)
                       && incoming().id == existing().id
                       && incoming().userId == existing().userId
-                      && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'name', 'shortDescription', 'definition', 'personality', 'body', 'dickSize', 'userId']);
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'name', 'shortDescription', 'definition', 'personality', 'body', 'dickSize', 'userId', 'avatarUrl', 'startingArousal', 'createdAt']);
                       
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(characterId);
       }

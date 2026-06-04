@@ -38,6 +38,14 @@
           "type": "string",
           "description": "Detailed narrative background definition or vector DNA"
         },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Base64 encoded synthesized portrait image or fallback string"
+        },
+        "startingArousal": {
+          "type": "integer",
+          "description": "Chosen sexual arousal level with which this character initiates simulations"
+        },
         "userId": {
           "type": "string",
           "description": "UID of the user who owns the character"
