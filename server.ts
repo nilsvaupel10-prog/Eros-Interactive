@@ -4,6 +4,9 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import { generateSystemPrompt } from './server/prompt';
 import dotenv from 'dotenv';
+
+// Load environment variables from .env.local (as recommended in README) and fallback to .env
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 async function startServer() {
