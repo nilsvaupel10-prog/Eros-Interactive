@@ -1,0 +1,6 @@
+{
+  "name": "Eros Interactive",
+  "description": "An interactive, immersive text adventure experience.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

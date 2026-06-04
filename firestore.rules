@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny catch-all safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation Blueprints
+    function isValidUserProfile(data) {
+      return data.email is string 
+        && data.email.size() > 0 
+        && data.email.size() <= 200
+        && data.keys().hasAll(['email'])
+        && (data.keys().size() == 1 || (data.keys().size() == 2 && data.keys().hasAll(['lastActive'])));
+    }
+
+    function isValidCustomCharacter(data, characterId) {
+      return data.id == characterId
+        && data.userId == request.auth.uid
+        && data.name is string && data.name.size() <= 100
+        && data.definition is string && data.definition.size() <= 15000
+        && data.keys().hasAll(['id', 'name', 'definition', 'userId'])
+        && data.keys().size() <= 8;
+    }
+
+    function isValidGameSave(data, saveId) {
+      return data.id == saveId
+        && data.userId == request.auth.uid
+        && data.name is string && data.name.size() <= 100
+        && data.scenarioInput is string && data.scenarioInput.size() <= 15000
+        && data.playerCharacterId is string && data.playerCharacterId.size() <= 128
+        && data.gameMode is string && (data.gameMode == 'standard' || data.gameMode == 'free_will')
+        && data.messages is list && data.messages.size() <= 200
+        && data.activeCharacterIds is list && data.activeCharacterIds.size() <= 12
+        && data.keys().hasAll(['id', 'name', 'messages', 'userId'])
+        && data.keys().size() <= 12;
+    }
+
+    // Primary Routes
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming());
+      
+      // Email is immutable, only lastActive can transition
+      allow update: if isOwner(userId) && isValidId(userId) 
+                    && isValidUserProfile(incoming())
+                    && incoming().email == existing().email
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['lastActive']);
+      allow delete: if false;
+
+      // Custom Characters Nested Collection
+      match /customCharacters/{characterId} {
+        allow get, list: if isOwner(userId) && isValidId(userId) && isValidId(characterId);
+        
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(characterId)
+                      && isValidCustomCharacter(incoming(), characterId);
+                      
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(characterId)
+                      && isValidCustomCharacter(incoming(), characterId)
+                      && incoming().id == existing().id
+                      && incoming().userId == existing().userId
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'name', 'shortDescription', 'definition', 'personality', 'body', 'dickSize', 'userId']);
+                      
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(characterId);
+      }
+
+      // Game Saves Nested Collection
+      match /saves/{saveId} {
+        allow get, list: if isOwner(userId) && isValidId(userId) && isValidId(saveId);
+        
+        allow create: if isOwner(userId) && isValidId(userId) && isValidId(saveId)
+                      && isValidGameSave(incoming(), saveId);
+                      
+        allow update: if isOwner(userId) && isValidId(userId) && isValidId(saveId)
+                      && isValidGameSave(incoming(), saveId)
+                      && incoming().id == existing().id
+                      && incoming().userId == existing().userId
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'name', 'messages', 'scenarioInput', 'playerCharacterId', 'gameMode', 'activeCharacterIds', 'provider', 'openRouterModel', 'timestamp', 'customApiKey', 'userId']);
+                      
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(saveId);
+      }
+    }
+  }
+}
