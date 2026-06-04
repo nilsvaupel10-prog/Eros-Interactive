@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "start": "node dist/server.cjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "check": "npm run lint && npm run build",
+    "scan:secrets": "node scripts/scan-secrets.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

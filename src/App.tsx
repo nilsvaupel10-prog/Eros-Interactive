@@ -33,7 +33,7 @@ export default function App() {
   const [arousalDecay, setArousalDecay] = useState<boolean>(false);
   
   // API provider state
-  const [provider, setProvider] = useState<'gemini' | 'openrouter'>('gemini');
+  const [provider, setProvider] = useState<'gemini' | 'openrouter' | 'mock'>('gemini');
   const [openRouterModel, setOpenRouterModel] = useState<string>('deepseek/deepseek-chat');
   const [customApiKey, setCustomApiKey] = useState<string>('');
   const [showSettings, setShowSettings] = useState(false);
@@ -867,7 +867,7 @@ Behavioral Response Guidelines:
   // Intro Screen
   if (!started) {
     return (
-      <div className="min-h-screen bg-[#07070a] text-zinc-300 flex items-center justify-center p-4 md:p-8 font-sans relative overflow-hidden selection:bg-red-900 selection:text-white">
+      <div className="safe-screen min-h-screen bg-[#07070a] text-zinc-300 flex items-center justify-center p-4 md:p-8 font-sans relative overflow-x-hidden selection:bg-red-900 selection:text-white">
         {/* Ambient atmospheric cyber glow background */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-7xl h-full pointer-events-none opacity-[0.04] bg-[radial-gradient(circle_at_top,rgba(220,38,38,0.85),transparent_65%)]" />
 
@@ -1817,7 +1817,7 @@ Behavioral Response Guidelines:
                 {/* AI Gateway Selection */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">AI Gateway Provider</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                     <button
                       type="button"
                       onClick={() => setProvider('gemini')}
@@ -1828,7 +1828,7 @@ Behavioral Response Guidelines:
                       }`}
                     >
                       <span className="font-bold text-xs uppercase block">Gemini Core</span>
-                      <span className="text-[10px] text-zinc-500">Free, fast default server-side API.</span>
+                      <span className="text-[10px] text-zinc-500 line-clamp-1 md:line-clamp-none">Free, fast default server-side API.</span>
                     </button>
                     <button
                       type="button"
@@ -1839,8 +1839,20 @@ Behavioral Response Guidelines:
                           : 'bg-zinc-950/40 border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
                       }`}
                     >
-                      <span className="font-bold text-xs uppercase block">OpenRouter API</span>
-                      <span className="text-[10px] text-zinc-500">Unlock MythoMax, Llama, DeepSeek.</span>
+                      <span className="font-bold text-xs uppercase block">OpenRouter</span>
+                      <span className="text-[10px] text-zinc-500 line-clamp-1 md:line-clamp-none">MythoMax, Llama, DeepSeek.</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setProvider('mock')}
+                      className={`p-3 rounded-lg border text-left transition-all ${
+                        provider === 'mock'
+                          ? 'bg-zinc-800 border-red-500 text-zinc-100'
+                          : 'bg-zinc-950/40 border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                      }`}
+                    >
+                      <span className="font-bold text-xs uppercase block text-orange-400">UI Test Mode</span>
+                      <span className="text-[10px] text-zinc-500 line-clamp-1 md:line-clamp-none">No API key. Safe layouts & telemetry test.</span>
                     </button>
                   </div>
                 </div>
@@ -1952,7 +1964,7 @@ Behavioral Response Guidelines:
 
   // Active Story
   return (
-    <div className="h-screen w-full bg-[#07070a] text-zinc-100 p-2 md:p-5 flex flex-col gap-3 md:gap-4 overflow-hidden font-sans selection:bg-red-950 selection:text-white">
+    <div className="flex flex-col h-full safe-screen bg-[#07070a] text-zinc-100 p-2 md:p-5 gap-3 md:gap-4 overflow-hidden font-sans selection:bg-red-950 selection:text-white">
       {/* Simulation Header */}
       <header className="flex items-center justify-between border-b border-zinc-900 pb-2 md:pb-3 shrink-0">
         <div className="flex items-center gap-2">
@@ -2043,14 +2055,14 @@ Behavioral Response Guidelines:
         <button 
           type="button"
           onClick={() => setActiveMobileTab('timeline')}
-          className={`flex-1 py-1.5 text-center rounded-lg text-[10px] font-mono font-bold uppercase transition-all tracking-wider ${activeMobileTab === 'timeline' ? 'bg-red-950/40 border border-red-900/30 text-red-400 font-black' : 'text-zinc-550 hover:text-zinc-350 bg-transparent border border-transparent'}`}
+          className={`tap-target flex-1 py-1.5 text-center rounded-lg text-[10px] font-mono font-bold uppercase transition-all tracking-wider ${activeMobileTab === 'timeline' ? 'bg-red-950/40 border border-red-900/30 text-red-400 font-black' : 'text-zinc-550 hover:text-zinc-350 bg-transparent border border-transparent'}`}
         >
           💬 Story Timeline
         </button>
         <button 
           type="button"
           onClick={() => setActiveMobileTab('dossiers')}
-          className={`flex-1 py-1.5 text-center rounded-lg text-[10px] font-mono font-bold uppercase transition-all tracking-wider ${activeMobileTab === 'dossiers' ? 'bg-red-950/40 border border-red-900/30 text-red-400 font-black' : 'text-zinc-550 hover:text-zinc-350 bg-transparent border border-transparent'}`}
+          className={`tap-target flex-1 py-1.5 text-center rounded-lg text-[10px] font-mono font-bold uppercase transition-all tracking-wider ${activeMobileTab === 'dossiers' ? 'bg-red-950/40 border border-red-900/30 text-red-400 font-black' : 'text-zinc-550 hover:text-zinc-350 bg-transparent border border-transparent'}`}
         >
           📊 Cast Dossiers
         </button>
@@ -2652,7 +2664,7 @@ Behavioral Response Guidelines:
               {/* AI Gateway Selection */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">AI Gateway Provider</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setProvider('gemini')}
@@ -2663,7 +2675,7 @@ Behavioral Response Guidelines:
                     }`}
                   >
                     <span className="font-bold text-xs uppercase block">Gemini Core</span>
-                    <span className="text-[10px] text-zinc-500">Free, fast default server-side API.</span>
+                    <span className="text-[10px] text-zinc-500 line-clamp-1 md:line-clamp-none">Free, fast default server-side API.</span>
                   </button>
                   <button
                     type="button"
@@ -2674,8 +2686,20 @@ Behavioral Response Guidelines:
                         : 'bg-zinc-950/40 border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
                     }`}
                   >
-                    <span className="font-bold text-xs uppercase block">OpenRouter API</span>
-                    <span className="text-[10px] text-zinc-500">Unlock MythoMax, Llama, DeepSeek.</span>
+                    <span className="font-bold text-xs uppercase block">OpenRouter</span>
+                    <span className="text-[10px] text-zinc-500 line-clamp-1 md:line-clamp-none">MythoMax, Llama, DeepSeek.</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProvider('mock')}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      provider === 'mock'
+                        ? 'bg-zinc-800 border-red-500 text-zinc-100'
+                        : 'bg-zinc-950/40 border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                    }`}
+                  >
+                    <span className="font-bold text-xs uppercase block text-orange-400">UI Test Mode</span>
+                    <span className="text-[10px] text-zinc-500 line-clamp-1 md:line-clamp-none">No API key. Safe layouts & telemetry test.</span>
                   </button>
                 </div>
               </div>

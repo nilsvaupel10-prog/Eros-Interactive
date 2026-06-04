@@ -11,6 +11,8 @@ export function generateSystemPrompt(
     consequences?: boolean;
     arousalSpeed?: 'slow' | 'normal' | 'fast';
     narrativeTone?: 'romantic' | 'smutty' | 'kinky' | 'story-driven';
+    complianceLevel?: 'compliant' | 'normal' | 'resistant' | 'defiant';
+    arousalDecay?: boolean;
   }
 ) {
   const charactersText = characters.map(c => {

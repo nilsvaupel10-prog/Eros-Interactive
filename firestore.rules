@@ -42,10 +42,10 @@ service cloud.firestore {
         && data.userId == request.auth.uid
         && data.name is string && data.name.size() <= 100
         && data.definition is string && data.definition.size() <= 15000
-        && (!data.keys().hasAny(['avatarUrl']) || (data.avatarUrl is string && data.avatarUrl.size() <= 1000000))
-        && (!data.keys().hasAny(['startingArousal']) || (data.startingArousal is int && data.startingArousal >= 0 && data.startingArousal <= 100))
+        && (!data.keys().hasAny(['avatarUrl']) || data.avatarUrl == null || (data.avatarUrl is string && data.avatarUrl.size() <= 1000000))
+        && (!data.keys().hasAny(['startingArousal']) || data.startingArousal == null || (data.startingArousal is int && data.startingArousal >= 0 && data.startingArousal <= 100))
         && data.keys().hasAll(['id', 'name', 'definition', 'userId'])
-        && data.keys().size() <= 12;
+        && data.keys().size() <= 15;
     }
 
     function isValidGameSave(data, saveId) {
@@ -56,9 +56,9 @@ service cloud.firestore {
         && data.playerCharacterId is string && data.playerCharacterId.size() <= 128
         && data.gameMode is string && (data.gameMode == 'standard' || data.gameMode == 'free_will')
         && data.messages is list && data.messages.size() <= 200
-        && data.activeCharacterIds is list && data.activeCharacterIds.size() <= 12
+        && data.activeCharacterIds is list && data.activeCharacterIds.size() <= 15
         && data.keys().hasAll(['id', 'name', 'messages', 'userId'])
-        && data.keys().size() <= 12;
+        && data.keys().size() <= 16;
     }
 
     // Primary Routes
@@ -75,7 +75,8 @@ service cloud.firestore {
 
       // Custom Characters Nested Collection
       match /customCharacters/{characterId} {
-        allow get, list: if isOwner(userId) && isValidId(userId) && isValidId(characterId);
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(characterId);
+        allow list: if isOwner(userId) && isValidId(userId);
         
         allow create: if isOwner(userId) && isValidId(userId) && isValidId(characterId)
                       && isValidCustomCharacter(incoming(), characterId);
@@ -91,7 +92,8 @@ service cloud.firestore {
 
       // Game Saves Nested Collection
       match /saves/{saveId} {
-        allow get, list: if isOwner(userId) && isValidId(userId) && isValidId(saveId);
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(saveId);
+        allow list: if isOwner(userId) && isValidId(userId);
         
         allow create: if isOwner(userId) && isValidId(userId) && isValidId(saveId)
                       && isValidGameSave(incoming(), saveId);
@@ -100,7 +102,7 @@ service cloud.firestore {
                       && isValidGameSave(incoming(), saveId)
                       && incoming().id == existing().id
                       && incoming().userId == existing().userId
-                      && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'name', 'messages', 'scenarioInput', 'playerCharacterId', 'gameMode', 'activeCharacterIds', 'provider', 'openRouterModel', 'timestamp', 'customApiKey', 'userId']);
+                      && incoming().diff(existing()).affectedKeys().hasOnly(['id', 'name', 'messages', 'scenarioInput', 'playerCharacterId', 'gameMode', 'activeCharacterIds', 'provider', 'openRouterModel', 'timestamp', 'customApiKey', 'userId', 'options']);
                       
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(saveId);
       }

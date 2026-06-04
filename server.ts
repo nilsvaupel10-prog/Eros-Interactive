@@ -8,9 +8,9 @@ dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '2mb' }));
 
   let aiClient: GoogleGenAI | null = null;
   
@@ -25,11 +25,70 @@ async function startServer() {
     return aiClient;
   }
 
+  // Health endpoint
+  app.get('/api/health', (req, res) => {
+    res.json({
+      ok: true,
+      environment: process.env.NODE_ENV || 'development',
+      providers: {
+        gemini: Boolean(process.env.GEMINI_API_KEY),
+        openrouter: Boolean(process.env.OPENROUTER_API_KEY),
+        mock: true
+      }
+    });
+  });
+
   // API POST route to handle chat
   app.post('/api/chat', async (req, res) => {
     try {
+      if (!req.body.scenarioContext) {
+        return res.status(400).json({ error: 'scenarioContext is required' });
+      }
+      if (!Array.isArray(req.body.messages) || req.body.messages.length === 0) {
+        return res.status(400).json({ error: 'messages must be a non-empty array' });
+      }
+
       const { messages, scenarioContext, provider = 'gemini', openRouterModel = 'deepseek/deepseek-chat', customApiKey } = req.body; 
       
+      if (!['gemini', 'openrouter', 'mock'].includes(provider)) {
+        return res.status(400).json({ error: 'provider must be one of gemini, openrouter, mock' });
+      }
+
+      if (provider === 'mock') {
+        const mockResponse = `This is a mock response from the UI test provider. The system is operating normally without using true API quota.
+
+Here is a typical narrative paragraph testing the UI rendering length. It usually contains actions and dialogue.
+
+<STATE>
+{
+  "characterStates": [
+    {
+      "name": "Jane",
+      "arousal": 35,
+      "trust": 40,
+      "affinity": 20,
+      "tags": ["testing"]
+    }
+  ],
+  "pornstarStats": {
+    "subscribers": 1500,
+    "tips": 250,
+    "socialMood": "Trending up"
+  }
+}
+</STATE>
+
+[OPTIONS]
+1. Respond positively to the mock scenario.
+2. Question the reality of this simulated test environment.
+3. Attempt to interact with the mock character 'Jane'.
+4. Decline and exit the mock interaction.`;
+        
+        // Add a slight delay to simulate network
+        await new Promise(resolve => setTimeout(resolve, 800));
+        return res.json({ text: mockResponse, model: 'mock-local-ui-tester' });
+      }
+
       const systemPrompt = generateSystemPrompt(
         scenarioContext.scenarioDescription,
         scenarioContext.characters,
@@ -59,7 +118,7 @@ async function startServer() {
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`,
-            'HTTP-Referer': 'https://ai.studio/build',
+            'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000',
             'X-Title': 'Eros Interactive Framework'
           },
           body: JSON.stringify({
@@ -76,7 +135,7 @@ async function startServer() {
 
         const completion = await response.json();
         const text = completion.choices?.[0]?.message?.content || '';
-        return res.json({ text });
+        return res.json({ text, model: openRouterModel });
       }
 
       const ai = getGenAIClient();
@@ -87,29 +146,26 @@ async function startServer() {
       }));
 
       // Define model fallback chain
-      // If we used a specific model in the request, we'd start there. 
-      // Since it's currently hardcoded, we'll start with 1.5 Pro and fall back.
-      const modelChain = ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'];
+      const modelChain = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
       let lastError: any = null;
 
       for (const modelName of modelChain) {
         try {
-          const model = ai.getGenerativeModel({
+          const response = await ai.models.generateContent({
             model: modelName,
-            systemInstruction: systemPrompt,
-            safetySettings: [
-              { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-              { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-            ],
-          });
-
-          const response = await model.generateContent({
             contents: formattedMessages,
+            config: {
+              systemInstruction: systemPrompt,
+              safetySettings: [
+                { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+                { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+              ],
+            }
           });
           
-          return res.json({ text: response.response.text(), model: modelName });
+          return res.json({ text: response.text, model: modelName });
         } catch (err: any) {
           lastError = err;
           const statusCode = err?.status || err?.response?.status;

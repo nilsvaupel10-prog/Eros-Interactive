@@ -74,7 +74,7 @@ export interface SaveSlot {
   playerCharacterId: string;
   gameMode: GameMode;
   activeCharacterIds: string[];
-  provider: 'gemini' | 'openrouter';
+  provider: 'gemini' | 'openrouter' | 'mock';
   openRouterModel: string;
   customApiKey?: string;
   options?: GameOptions;
