@@ -1,0 +1,129 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Represents a user profile of the simulation",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "The user's verified email address"
+        },
+        "lastActive": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the user last interacted with the app"
+        }
+      },
+      "required": ["email"]
+    },
+    "CustomCharacter": {
+      "title": "CustomCharacter",
+      "description": "Represents a user-created story character definition",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the character definition"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the character"
+        },
+        "shortDescription": {
+          "type": "string",
+          "description": "Short bio hook or role of the character"
+        },
+        "definition": {
+          "type": "string",
+          "description": "Detailed narrative background definition or vector DNA"
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Base64 encoded synthesized portrait image or fallback string"
+        },
+        "startingArousal": {
+          "type": "integer",
+          "description": "Chosen sexual arousal level with which this character initiates simulations"
+        },
+        "userId": {
+          "type": "string",
+          "description": "UID of the user who owns the character"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this custom character was instantiated"
+        }
+      },
+      "required": ["id", "name", "definition", "userId"]
+    },
+    "GameSave": {
+      "title": "GameSave",
+      "description": "Represents a narrative snapshot save slot",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the save slot"
+        },
+        "name": {
+          "type": "string",
+          "description": "Custom user-provided name for this save slot"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this save slot was written"
+        },
+        "messages": {
+          "type": "array",
+          "description": "The current timeline story dialogue history"
+        },
+        "scenarioInput": {
+          "type": "string",
+          "description": "The underlying simulation prompt scenario"
+        },
+        "playerCharacterId": {
+          "type": "string",
+          "description": "The currently active player POV character id"
+        },
+        "gameMode": {
+          "type": "string",
+          "description": "Active story game mode: standard or free-will"
+        },
+        "activeCharacterIds": {
+          "type": "array",
+          "description": "The currently selected active cast ids"
+        },
+        "provider": {
+          "type": "string",
+          "description": "Active LLM provider"
+        },
+        "openRouterModel": {
+          "type": "string",
+          "description": "Active OpenRouter model name if active"
+        },
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who owns this save slot"
+        }
+      },
+      "required": ["id", "name", "messages", "userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Primary user configuration"
+    },
+    "/users/{userId}/customCharacters/{characterId}": {
+      "schema": "CustomCharacter",
+      "description": "The custom roleplay characters defined by this user"
+    },
+    "/users/{userId}/saves/{saveId}": {
+      "schema": "GameSave",
+      "description": "Saves and checkpoints created by this user"
+    }
+  }
+}
