@@ -41,6 +41,65 @@ async function startServer() {
     });
   });
 
+  // NEW: Erotic Avatar Portrait Generator (makes the inline synth + creator avatar features visible & functional)
+  app.post('/api/generate-avatar', async (req, res) => {
+    try {
+      const { prompt = 'seductive character portrait', provider = 'gemini', customApiKey } = req.body;
+      
+      // Generate a beautiful themed SVG placeholder (erotic cyber-neon style) so the feature works immediately
+      // In a full production setup you would call Gemini Imagen / Vertex AI image gen or an external NSFW-capable model here
+      const hash = prompt.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+      const hue = Math.abs(hash) % 360;
+      const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="hsl(${hue}, 75%, 12%)"/>
+      <stop offset="100%" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="256" cy="210" r="135" fill="hsl(${hue}, 65%, 35%)" opacity="0.9"/>
+  <ellipse cx="256" cy="380" rx="155" ry="95" fill="hsl(${hue}, 55%, 22%)"/>
+  <circle cx="256" cy="210" r="135" fill="none" stroke="hsl(${hue}, 90%, 70%)" stroke-width="3" filter="url(#glow)"/>
+  <text x="256" y="470" text-anchor="middle" fill="#e2e8f0" font-size="22" font-family="monospace" opacity="0.75">${prompt.substring(0, 28)}...</text>
+  <circle cx="180" cy="180" r="18" fill="hsl(${hue}, 90%, 75%)" opacity="0.6"/>
+  <circle cx="330" cy="180" r="18" fill="hsl(${hue}, 90%, 75%)" opacity="0.6"/>
+</svg>`;
+      
+      const dataUrl = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+      
+      res.json({ 
+        imageUrl: dataUrl, 
+        model: 'erotic-placeholder-avatar-v1',
+        note: 'Stunning themed portrait generated. Connect real image model (Imagen/Gemini vision) for photoreal NSFW results.' 
+      });
+    } catch (err: any) {
+      console.error('Avatar gen error:', err);
+      res.status(500).json({ error: err.message || 'Avatar synthesis failed' });
+    }
+  });
+
+  // NEW: TTS endpoint (voice narration for model responses). Frontend falls back gracefully.
+  app.post('/api/tts', async (req, res) => {
+    try {
+      const { text, voice = 'en-US-Standard-C' } = req.body;
+      if (!text) return res.status(400).json({ error: 'text is required' });
+      
+      // Placeholder response — real Gemini TTS or ElevenLabs would go here.
+      // Returning null audio tells frontend to use browser SpeechSynthesis (already implemented & works great for dirty talk)
+      res.json({ 
+        audio: null, 
+        note: 'Browser TTS fallback engaged for explicit narrative voice. Full neural voice coming soon.' 
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // API POST route to handle chat
   app.post('/api/chat', async (req, res) => {
     try {
@@ -51,7 +110,7 @@ async function startServer() {
         return res.status(400).json({ error: 'messages must be a non-empty array' });
       }
 
-      const { messages, scenarioContext, provider = 'gemini', openRouterModel = 'deepseek/deepseek-chat', customApiKey } = req.body; 
+      const { messages, scenarioContext, provider = 'gemini', openRouterModel = 'deepseek/deepseek-chat', customApiKey, modelSettings, sessionStats, charMemories } = req.body; 
       
       if (!['gemini', 'openrouter', 'mock'].includes(provider)) {
         return res.status(400).json({ error: 'provider must be one of gemini, openrouter, mock' });
@@ -97,7 +156,8 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
         scenarioContext.characters,
         scenarioContext.playerCharacterId,
         scenarioContext.gameMode,
-        scenarioContext.options
+        scenarioContext.options,
+        scenarioContext.charMemories || charMemories
       );
 
       if (provider === 'openrouter') {
@@ -127,7 +187,7 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
           body: JSON.stringify({
             model: openRouterModel,
             messages: formattedMessages,
-            temperature: 0.9,
+            temperature: modelSettings?.temperature || 0.9,
           })
         });
 
