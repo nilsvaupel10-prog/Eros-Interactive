@@ -1,0 +1,23 @@
+{
+  "name": "Eros Interactive",
+  "short_name": "Eros",
+  "description": "An interactive, immersive text adventure experience.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "https://placehold.co/192x192/09090b/e4e4e7?text=EROS",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://placehold.co/512x512/09090b/e4e4e7?text=EROS",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

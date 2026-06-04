@@ -2,6 +2,11 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Diagnostic route for connectivity checks - PUBLIC ACCESS
+    match /test/connection {
+      allow read: if true;
+    }
+
     // Default-deny catch-all safety net
     match /{document=**} {
       allow read, write: if false;

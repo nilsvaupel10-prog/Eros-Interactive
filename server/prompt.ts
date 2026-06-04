@@ -7,6 +7,7 @@ export function generateSystemPrompt(
   characters: { name: string; definition: string; startingArousal?: number; tags?: string[] }[],
   playerCharacterId: string,
   gameMode: 'standard' | 'free_will' | 'pornstar' | 'sexting' | 'hookup',
+  sessionStats?: { stamina: number; willpower: number; stance: 'verbal' | 'tactile' },
   options?: {
     consequences?: boolean;
     arousalSpeed?: 'slow' | 'normal' | 'fast';
@@ -26,6 +27,15 @@ export function generateSystemPrompt(
   } else {
     playerInstruction = `The user is roleplaying as character ID/Name: ${playerCharacterId}. Write in 2nd person (you) directed at this character. DO NOT make decisions for the user's character. `;
   }
+
+  const sessionContext = sessionStats ? `
+CURRENT SESSION RESILIENCE:
+- Player Stamina: ${sessionStats.stamina}% (Physical energy/duration)
+- User Willpower Pool: ${sessionStats.willpower}% (Mental strength/persistence)
+- Focused Stance: ${sessionStats.stance === 'verbal' ? 'VERBAL (Focus on dirty talk, praise, whispering, and sensual dialogue)' : 'TACTILE (Focus on touching, teasing, physical positioning, and anatomical sensation)'}
+
+Note: If stamina or willpower is low, incorporate signs of exhaustion, heavy breathing, or mental vulnerability into the narrative. Characters may exploit these weaknesses.
+` : '';
 
   let modeInstruction = '';
   if (gameMode === 'free_will') {
@@ -124,6 +134,7 @@ CORE OPERATING PARAMETERS:
 - Choices should suggest consequences without fully revealing them
 - Maintain continuity—reference previous choices' impacts on character states (arousal, emotional shifts, physical changes)
 ${playerInstruction}
+${sessionContext}
 ${modeInstruction}
 ${startingArousalPrompt}
 

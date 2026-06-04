@@ -56,12 +56,16 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 // MANDATORY connection validation at boot
-export async function testConnection() {
+export async function testConnection(): Promise<boolean> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
+    return true;
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error("Please check your Firebase configuration. Client is offline.");
+    } else {
+      console.error("Firestore connectivity diagnostic failed:", error);
     }
+    return false;
   }
 }

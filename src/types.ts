@@ -3,6 +3,7 @@ export interface ChatMessage {
   role: 'user' | 'model';
   content: string;
   isInitial?: boolean;
+  rating?: -1 | 0 | 1; // -1: bad, 1: good
 }
 
 export interface CharacterState {
@@ -11,6 +12,7 @@ export interface CharacterState {
   trust?: number;
   affinity?: number;
   tags: string[];
+  memories?: string[]; // Persistent character-specific memories
 }
 
 export interface PornstarStats {
@@ -38,11 +40,22 @@ export interface CharacterDefinition {
     assertiveness: number; // Submissive (0) to Dominant (100)
     sociability: number;   // Introvert (0) to Extravert (100)
     temperament: number;   // Sweet/Passive (0) to Aggressive (100)
+    willpower?: number;    // Easily broken (0) to Unbreakable (100)
+    sensuality?: number;
+    compliance?: number;
+    flirtatiousness?: number;
+    kinkiness?: number;
+    jealousy?: number;
+    exhibitionism?: number;
+    eloquence?: number;
+    playfulness?: number;
+    curiosity?: number;
   };
   body?: {
     height: number;       // Short (0) to Tall (100) -> 140cm to 210cm
     athleticism: number;  // Soft (0) to Muscular (100)
     curviness: number;    // Petite/Lean (0) to Voluptuous/Thick (100)
+    clothing?: string;
   };
   dickSize?: number;      // None (0) to Massive (100)
 }
@@ -55,6 +68,14 @@ export interface GameOptions {
   narrativeTone: 'romantic' | 'smutty' | 'kinky' | 'story-driven';
   complianceLevel?: 'compliant' | 'normal' | 'resistant' | 'defiant';
   arousalDecay?: boolean;
+  autoSaveFrequency?: 'off' | 'every-turn' | 'every-5-mins';
+  proseLength?: number; // 0 to 100
+  dialogueAmount?: number; // 0 to 100
+}
+
+export interface ModelSettings {
+  temperature: number;
+  topP: number;
 }
 
 export interface ScenarioContext {
@@ -63,6 +84,7 @@ export interface ScenarioContext {
   gameMode: GameMode;
   scenarioDescription: string;
   options?: GameOptions;
+  charMemories?: Record<string, string[]>;
 }
 
 export interface SaveSlot {
@@ -78,5 +100,6 @@ export interface SaveSlot {
   openRouterModel: string;
   customApiKey?: string;
   options?: GameOptions;
+  modelSettings?: ModelSettings;
 }
 

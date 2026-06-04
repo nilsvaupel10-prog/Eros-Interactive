@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Sparkles, Loader2, Play, Users, Plus, X, Brain, Save, History, Settings, Trash2, HelpCircle, Sliders, Upload, Camera, MessageSquare, Flame, Volume2, VolumeX, UserPlus, Info } from 'lucide-react';
+import { Send, Sparkles, Loader2, Play, Users, Plus, X, Brain, Save, History, Settings, Trash2, HelpCircle, Sliders, Upload, Camera, MessageSquare, Flame, Volume2, VolumeX, UserPlus, Info, RefreshCcw, Download, Signal, SignalLow, ThumbsUp, ThumbsDown, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage, StoryState, CharacterDefinition, GameMode, CharacterState, SaveSlot } from './types';
 import { parseModelResponse } from './utils';
@@ -10,6 +10,75 @@ import { defaultScenarios, ScenarioPreset } from './scenariosData';
 import { db, auth, googleProvider, handleFirestoreError, OperationType, testConnection } from './firebase';
 import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { collection, getDocs, getDoc, setDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+
+const ReactingAvatarSVG = ({ name, arousal }: { name: string; arousal: number }) => {
+  const hash = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const hue = (hash * 137.508) % 360;
+  const isHigh = arousal >= 66;
+  const isMid = arousal >= 31 && arousal < 66;
+  const eyeHeight = isHigh ? 1.5 : isMid ? 3 : 5;
+  const blushOpacity = Math.min(0.9, arousal / 110);
+  
+  let mouthPath = "M 24 33 Q 30 35 36 33";
+  if (isHigh) {
+    mouthPath = "M 24 32 Q 30 38 36 32 Z";
+  } else if (isMid) {
+    mouthPath = "M 25 33 Q 30 36 35 33";
+  }
+
+  const rotation = isHigh ? 3 : isMid ? -2 : 0;
+
+  return (
+    <svg 
+      viewBox="0 0 60 60" 
+      className="w-full h-full rounded-md border border-zinc-800"
+      style={{
+        background: `radial-gradient(circle, hsl(${hue}, 45%, 15%) 0%, #09090b 100%)`,
+        boxShadow: arousal > 75 ? `0 0 10px hsl(${hue}, 80%, 40%)` : 'none'
+      }}
+    >
+      <g transform={`rotate(${rotation} 30 30)`}>
+        <circle cx="30" cy="28" r="18" fill="#111113" stroke={`hsl(${hue}, 40%, 30%)`} strokeWidth="1" />
+        {arousal > 20 && (
+          <>
+            <circle cx="21" cy="29" r="4" fill="#f43f5e" opacity={blushOpacity} style={{ filter: 'blur(1px)' }} />
+            <circle cx="39" cy="29" r="4" fill="#f43f5e" opacity={blushOpacity} style={{ filter: 'blur(1px)' }} />
+          </>
+        )}
+        {isHigh ? (
+          <>
+            <path d="M 17 24 Q 21 21 25 24" stroke={`hsl(${hue}, 90%, 75%)`} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+            <path d="M 35 24 Q 39 21 43 24" stroke={`hsl(${hue}, 90%, 75%)`} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+            <circle cx="21" cy="25" r="1" fill="#fff" opacity="0.8" />
+            <circle cx="39" cy="25" r="1" fill="#fff" opacity="0.8" />
+          </>
+        ) : isMid ? (
+          <>
+            <ellipse cx="21" cy="23" rx="3.5" ry={eyeHeight} fill={`hsl(${hue}, 80%, 70%)`} />
+            <ellipse cx="39" cy="23" rx="3.5" ry={eyeHeight} fill={`hsl(${hue}, 80%, 70%)`} />
+            <circle cx="21" cy="23" r="1.5" fill="#000" />
+            <circle cx="39" cy="23" r="1.5" fill="#000" />
+          </>
+        ) : (
+          <>
+            <circle cx="21" cy="23" r="3.5" fill={`hsl(${hue}, 80%, 65%)`} />
+            <circle cx="39" cy="23" r="3.5" fill={`hsl(${hue}, 80%, 65%)`} />
+            <circle cx="21" cy="23" r="1.5" fill="#000" />
+            <circle cx="39" cy="23" r="1.5" fill="#000" />
+            <circle cx="22" cy="22" r="0.8" fill="#fff" />
+            <circle cx="40" cy="22" r="0.8" fill="#fff" />
+          </>
+        )}
+        <path d="M 16 20 Q 21 18 26 21" stroke="#4b5563" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+        <path d="M 34 21 Q 39 18 44 20" stroke="#4b5563" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+        <path d={mouthPath} stroke={`hsl(${hue}, 85%, 65%)`} strokeWidth="1.5" fill={isHigh ? `hsl(${hue}, 80%, 30%)` : "none"} strokeLinecap="round" />
+        {arousal > 80 && (
+          <path d="M 42 16 Q 41 21 40 24" stroke="#60a5fa" strokeWidth="1" fill="none" opacity="0.75" />
+        )}
+      </g>
+    </svg>
+  );
+};
 
 export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -31,9 +100,20 @@ export default function App() {
   const [narrativeTone, setNarrativeTone] = useState<'romantic' | 'smutty' | 'kinky' | 'story-driven'>('smutty');
   const [complianceLevel, setComplianceLevel] = useState<'compliant' | 'normal' | 'resistant' | 'defiant'>('normal');
   const [arousalDecay, setArousalDecay] = useState<boolean>(false);
+  const [autoSaveFrequency, setAutoSaveFrequency] = useState<'off' | 'every-turn' | 'every-5-mins'>('every-turn');
+  const [proseLength, setProseLength] = useState(60); // 0 to 100
+  const [dialogueAmount, setDialogueAmount] = useState(50); // 0 to 100
+  const [charMemories, setCharMemories] = useState<Record<string, string[]>>({});
+
+  const [modelSettings, setModelSettings] = useState<{ temperature: number; topP: number }>({
+    temperature: 0.9,
+    topP: 1.0
+  });
   
   // API provider state
   const [provider, setProvider] = useState<'gemini' | 'openrouter' | 'mock'>('gemini');
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [openRouterModel, setOpenRouterModel] = useState<string>('deepseek/deepseek-chat');
   const [customApiKey, setCustomApiKey] = useState<string>('');
   const [showSettings, setShowSettings] = useState(false);
@@ -47,10 +127,12 @@ export default function App() {
   const [orModels, setOrModels] = useState<{ id: string, name: string }[]>(() => {
     try {
       const stored = localStorage.getItem('eros_or_models');
-      if (stored) {
+      if (stored && stored.trim() !== '') {
         return JSON.parse(stored);
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Failed to parse OpenRouter models from localStorage', e);
+    }
     return [
       { id: "deepseek/deepseek-chat", name: "DeepSeek V3 (Fast & Smart)" },
       { id: "gryphe/mythomax-l2-13b", name: "MythoMax L2 13B (Supreme Fiction & Roleplay)" },
@@ -68,6 +150,26 @@ export default function App() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [showDossierManager, setShowDossierManager] = useState(false);
   const [lastUsedModel, setLastUsedModel] = useState<string | null>(null);
+  const handleRateMessage = (msgId: string, rating: -1 | 0 | 1) => {
+    setMessages(prev => prev.map(m => m.id === msgId ? { ...m, rating } : m));
+  };
+
+  const handleUpdateMemory = (charId: string, memoryText: string, index?: number) => {
+    setCharMemories(prev => {
+      const existing = prev[charId] || [];
+      const updated = [...existing];
+      if (index !== undefined) {
+        if (memoryText.trim() === '') {
+          updated.splice(index, 1);
+        } else {
+          updated[index] = memoryText;
+        }
+      } else if (memoryText.trim() !== '') {
+        updated.push(memoryText);
+      }
+      return { ...prev, [charId]: updated };
+    });
+  };
 
   // Import modal state
   const [showImport, setShowImport] = useState(false);
@@ -80,6 +182,8 @@ export default function App() {
   const [creatorName, setCreatorName] = useState('');
   const [creatorShort, setCreatorShort] = useState('');
   const [creatorTags, setCreatorTags] = useState('');
+  const [editingCharacterId, setEditingCharacterId] = useState<string | null>(null);
+  const [creatorClothing, setCreatorClothing] = useState<string>('casual');
   const [creatorSliders, setCreatorSliders] = useState({
     assertiveness: 50,
     sociability: 50,
@@ -88,6 +192,16 @@ export default function App() {
     athleticism: 50,
     curviness: 55,
     dickSize: 0, // 0 means female default/None
+    willpower: 50,
+    sensuality: 50,
+    compliance: 50,
+    flirtatiousness: 50,
+    kinkiness: 55,
+    jealousy: 40,
+    exhibitionism: 50,
+    eloquence: 50,
+    playfulness: 50,
+    curiosity: 60,
   });
 
   // Sandbox AI Synthesizer and Startup config states
@@ -102,25 +216,49 @@ export default function App() {
 
   // Mobile navigation tabs state
   const [activeMobileTab, setActiveMobileTab] = useState<'timeline' | 'dossiers'>('timeline');
+  const [memoryEditingCharId, setMemoryEditingCharId] = useState<string | null>(null);
+  
+  // Game session dynamic trackers
+  const [stamina, setStamina] = useState(100);
+  const [willpowerPool, setWillpowerPool] = useState(100);
+  const [stance, setStance] = useState<'verbal' | 'tactile'>('verbal');
+  const [climaxTriggered, setClimaxTriggered] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [showArousalOverlay, setShowArousalOverlay] = useState(false);
+  const [lastArousalLevel, setLastArousalLevel] = useState(0);
 
   // Firebase Auth State
   const [currentUser, setCurrentUser] = useState<any>(null);
 
+  const [dbConnected, setDbConnected] = useState<boolean | null>(null);
+
   const restoreLocalData = () => {
+    const storedAutoSave = localStorage.getItem('eros_auto_save_frequency');
+    if (storedAutoSave) setAutoSaveFrequency(storedAutoSave as any);
+
+    const storedModelSettings = localStorage.getItem('eros_model_settings');
+    if (storedModelSettings) {
+      try {
+        setModelSettings(JSON.parse(storedModelSettings));
+      } catch (e) {}
+    }
+
     try {
       const stored = localStorage.getItem('eros_save_slots');
-      if (stored) {
+      if (stored && stored.trim() !== '') {
         setSaveSlots(JSON.parse(stored));
       } else {
         setSaveSlots([]);
       }
     } catch (e) {
       console.error('Failed to parse save slots', e);
+      setSaveSlots([]);
     }
 
     try {
       const storedChars = localStorage.getItem('eros_custom_characters');
-      if (storedChars) {
+      if (storedChars && storedChars.trim() !== '') {
         const parsed: CharacterDefinition[] = JSON.parse(storedChars);
         setAvailableCharacters(prev => {
           const fresh = defaultCharacters.filter(c => !parsed.some(pc => pc.id === c.id));
@@ -141,6 +279,8 @@ export default function App() {
       }
     } catch (e) {
       console.error('Failed to parse custom characters', e);
+      setAvailableCharacters(defaultCharacters);
+      setActiveCharacterIds(defaultCharacters.map(c => c.id));
     }
   };
 
@@ -212,7 +352,24 @@ export default function App() {
 
   // Listen to Auth State
   useEffect(() => {
-    testConnection();
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      console.log('--- EROS PWA --- Install prompt deferred.');
+    };
+
+    const handleOnlineStatus = () => setIsOnline(true);
+    const handleOfflineStatus = () => setIsOnline(false);
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('online', handleOnlineStatus);
+    window.addEventListener('offline', handleOfflineStatus);
+
+    const checkCon = async () => {
+      const ok = await testConnection();
+      setDbConnected(ok);
+    };
+    checkCon();
 
     const unsub = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
@@ -240,8 +397,41 @@ export default function App() {
       }
     });
 
-    return () => unsub();
+    return () => {
+      unsub();
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('online', handleOnlineStatus);
+      window.removeEventListener('offline', handleOfflineStatus);
+    };
   }, []);
+
+  // Auto-save logic
+  const lastAutoSaveRef = useRef<number>(0);
+  useEffect(() => {
+    if (started && !loading && messages.length > 1 && autoSaveFrequency !== 'off') {
+      const now = Date.now();
+      let shouldSave = false;
+      
+      if (autoSaveFrequency === 'every-turn') {
+        // Save if the last message is from the model and we haven't saved this turn
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg.role === 'model' && lastAutoSaveRef.current < parseInt(lastMsg.id)) {
+          shouldSave = true;
+          lastAutoSaveRef.current = parseInt(lastMsg.id);
+        }
+      } else if (autoSaveFrequency === 'every-5-mins') {
+        // Save if 5 minutes have passed since last save
+        if (now - lastAutoSaveRef.current > 5 * 60 * 1000) {
+          shouldSave = true;
+          lastAutoSaveRef.current = now;
+        }
+      }
+
+      if (shouldSave) {
+        handleSaveGame(`Auto-Save: ${new Date().toLocaleTimeString()}`);
+      }
+    }
+  }, [messages, loading, started, autoSaveFrequency]);
 
   // Auto-expire toast notifications after 4 seconds
   useEffect(() => {
@@ -252,6 +442,14 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [toastNotify]);
+
+  useEffect(() => {
+    localStorage.setItem('eros_auto_save_frequency', autoSaveFrequency);
+  }, [autoSaveFrequency]);
+
+  useEffect(() => {
+    localStorage.setItem('eros_model_settings', JSON.stringify(modelSettings));
+  }, [modelSettings]);
 
   const handleSaveGame = async (name: string) => {
     if (!name.trim()) return;
@@ -411,10 +609,14 @@ export default function App() {
       const resp = await fetch('/api/generate-avatar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: lookPrompt })
+        body: JSON.stringify({ prompt: lookPrompt, provider, customApiKey })
       });
       
-      const data = await resp.json();
+      const textResponse = await resp.text();
+      if (!textResponse || textResponse.trim() === '') {
+        throw new Error('Server returned an empty response for avatar generation');
+      }
+      const data = JSON.parse(textResponse);
       if (!resp.ok) throw new Error(data.error || 'Gemini Model server communication timeout');
       
       const updatedChar = { ...char, avatarUrl: data.imageUrl };
@@ -456,7 +658,7 @@ export default function App() {
     }
   };
 
-  const generateDefinitionFromSliders = (name: string, description: string, s: typeof creatorSliders) => {
+  const generateDefinitionFromSliders = (name: string, description: string, s: typeof creatorSliders, clothing: string) => {
     const calculatedHeight = Math.round(140 + (s.height / 100) * 70); // 140cm to 210cm
     
     // Dick size formatting text
@@ -480,25 +682,36 @@ Physical Dossier:
 - Height: ${calculatedHeight} cm
 - Athleticism Level: ${s.athleticism}% (Scale: 0%=Soft/Composed, 100%=Heavily Toned/Fit/Muscular)
 - Body Curviness / Thickness: ${s.curviness}% (Scale: 0%=Lean/Fine-boned, 100%=Sensual/Hourglass/Voluptuous)
+- Current Attire: ${clothing}
 - Genital Blueprint / Dick Size: ${dickDescription}
 
 Personality Framework Sliders:
 - Dominance factor: ${s.assertiveness}% (Scale: 0%=Submissive/Shy, 100%=Dominant/Commanding)
 - Sociability index: ${s.sociability}% (Scale: 0%=Introverted/Reserved, 100%=Boisterous/Extroverted)
 - Mood temperament: ${s.temperament}% (Scale: 0%=Sweet/Composed/Patient, 100%=Aggressive/Volatile/Hot-headed)
+- Willpower resilience: ${s.willpower}% (Scale: 0%=Fragile/Easily manipulated, 100%=Ironclad/Indomitable)
+- Sensuality drive: ${s.sensuality}% (Scale: 0%=Prude/Modest, 100%=Hyper-sexual/Uninhibited)
+- Compliance lean: ${s.compliance}% (Scale: 0%=Rebellious/Defiant, 100%=Obedient/Servile)
+- Flirtatiousness: ${s.flirtatiousness}% (Scale: 0%=Stiff/Businesslike, 100%=Teasing/Playful)
+- Kinkiness: ${s.kinkiness}% (Scale: 0%=Vanilla/Traditional, 100%=Experimental/Boundless)
+- Jealousy potential: ${s.jealousy}% (Scale: 0%=Compersive/Sharing, 100%=Possessive/Vindictive)
+- Exhibitionism: ${s.exhibitionism}% (Scale: 0%=Shy/Private, 100%=Bold/Public)
+- Eloquence/Vocabulary: ${s.eloquence}% (Scale: 0%=Vulgar/Short-spoken, 100%=Articulate/Sophisticated)
+- Playfulness: ${s.playfulness}% (Scale: 0%=Serious/Grim, 100%=Mischievous/Fun-loving)
+- Curiosity/Openness: ${s.curiosity}% (Scale: 0%=Set in ways, 100%=Eager for new experiences)
 
 Behavioral Response Guidelines:
 - Act strictly according to these custom slider properties. 
 - A character with high dominance (${s.assertiveness}%) will actively direct positions, tease possessively, use commanding dialogue, and refuse to subserve.
-- A character with high volatile temperament (${s.temperament}%) will break into explosive flushes, easily express intense lust, or exhibit sudden mood spikes.
+- A character with high willpower (${s.willpower}%) will put up a significant verbal or psychological fight before submitting, creating intense tension.
 - If possessing a dick (${s.dickSize > 0 ? 'Yes: ' + dickDescription : 'No'}), emphasize their bulge shape under sweatpants, their arousal, and physical depth in all explicit interactive paths.`;
   };
 
   const handleCreateCharacter = () => {
     if (!creatorName.trim()) return;
     
-    const targetId = creatorName.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now().toString().slice(-4);
-    const customDef = generateDefinitionFromSliders(creatorName.trim(), creatorShort.trim(), creatorSliders);
+    const targetId = editingCharacterId || (creatorName.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now().toString().slice(-4));
+    const customDef = generateDefinitionFromSliders(creatorName.trim(), creatorShort.trim(), creatorSliders, creatorClothing);
     
     // Process tags
     const tagsArray = creatorTags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
@@ -512,12 +725,23 @@ Behavioral Response Guidelines:
       personality: {
         assertiveness: creatorSliders.assertiveness,
         sociability: creatorSliders.sociability,
-        temperament: creatorSliders.temperament
+        temperament: creatorSliders.temperament,
+        willpower: creatorSliders.willpower,
+        sensuality: creatorSliders.sensuality,
+        compliance: creatorSliders.compliance,
+        flirtatiousness: creatorSliders.flirtatiousness,
+        kinkiness: creatorSliders.kinkiness,
+        jealousy: creatorSliders.jealousy,
+        exhibitionism: creatorSliders.exhibitionism,
+        eloquence: creatorSliders.eloquence,
+        playfulness: creatorSliders.playfulness,
+        curiosity: creatorSliders.curiosity,
       },
       body: {
         height: creatorSliders.height,
         athleticism: creatorSliders.athleticism,
-        curviness: creatorSliders.curviness
+        curviness: creatorSliders.curviness,
+        clothing: creatorClothing
       },
       dickSize: creatorSliders.dickSize,
       avatarUrl: creatorAvatarUrl || undefined,
@@ -528,6 +752,7 @@ Behavioral Response Guidelines:
     
     // Reset state
     setShowCreator(false);
+    setEditingCharacterId(null);
     setCreatorName('');
     setCreatorShort('');
     setCreatorTags('');
@@ -535,6 +760,7 @@ Behavioral Response Guidelines:
     setCreatorAvatarUrl('');
     setCreatorAvatarPrompt('');
     setAvatarSynthError('');
+    setCreatorClothing('casual');
     setCreatorSliders({
       assertiveness: 50,
       sociability: 50,
@@ -542,8 +768,48 @@ Behavioral Response Guidelines:
       height: 50,
       athleticism: 50,
       curviness: 55,
-      dickSize: 0
+      dickSize: 0,
+      willpower: 50,
+      sensuality: 50,
+      compliance: 50,
+      flirtatiousness: 50,
+      kinkiness: 55,
+      jealousy: 40,
+      exhibitionism: 50,
+      eloquence: 50,
+      playfulness: 50,
+      curiosity: 60,
     });
+  };
+
+  const handleEditCharacter = (char: CharacterDefinition) => {
+    setEditingCharacterId(char.id);
+    setCreatorName(char.name);
+    setCreatorShort(char.shortDescription);
+    setCreatorTags(char.tags?.join(', ') || '');
+    setCreatorStartingArousal(char.startingArousal || 20);
+    setCreatorAvatarUrl(char.avatarUrl || '');
+    setCreatorClothing(char.body?.clothing || 'casual');
+    setCreatorSliders({
+      assertiveness: char.personality?.assertiveness ?? 50,
+      sociability: char.personality?.sociability ?? 50,
+      temperament: char.personality?.temperament ?? 50,
+      height: char.body?.height ?? 50,
+      athleticism: char.body?.athleticism ?? 50,
+      curviness: char.body?.curviness ?? 55,
+      dickSize: char.dickSize ?? 0,
+      willpower: char.personality?.willpower ?? 50,
+      sensuality: char.personality?.sensuality ?? 50,
+      compliance: char.personality?.compliance ?? 50,
+      flirtatiousness: char.personality?.flirtatiousness ?? 50,
+      kinkiness: char.personality?.kinkiness ?? 55,
+      jealousy: char.personality?.jealousy ?? 40,
+      exhibitionism: char.personality?.exhibitionism ?? 50,
+      eloquence: char.personality?.eloquence ?? 50,
+      playfulness: char.personality?.playfulness ?? 50,
+      curiosity: char.personality?.curiosity ?? 60,
+    });
+    setShowCreator(true);
   };
 
   const handleImport = () => {
@@ -614,7 +880,12 @@ Behavioral Response Guidelines:
     try {
       const response = await fetch('https://openrouter.ai/api/v1/models');
       if (!response.ok) throw new Error('Network error fetching OpenRouter models');
-      const data = await response.json();
+      
+      const textResponse = await response.text();
+      if (!textResponse || textResponse.trim() === '') {
+        throw new Error('OpenRouter API returned an empty model list');
+      }
+      const data = JSON.parse(textResponse);
       if (data.data && Array.isArray(data.data)) {
         const mapped = data.data.map((m: any) => ({
           id: m.id,
@@ -645,13 +916,39 @@ Behavioral Response Guidelines:
       const lastMsg = messages[messages.length - 1];
       if (lastMsg.role === 'model') {
         const parsed = parseModelResponse(lastMsg.content);
-        if ('speechSynthesis' in window) {
-           window.speechSynthesis.cancel();
-           const textToRead = parsed.paragraphs.join(' ');
-           const utterance = new SpeechSynthesisUtterance(textToRead);
-           utterance.rate = 1.0;
-           window.speechSynthesis.speak(utterance);
-        }
+        const textToRead = parsed.paragraphs.join(' ');
+        
+        // Use Gemini TTS proxy if possible, fallback to browser
+        const speakText = async () => {
+          try {
+            const resp = await fetch('/api/tts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: textToRead, voice: 'en-US-Standard-C' })
+            });
+            if (!resp.ok) throw new Error('TTS proxy failed');
+            const textResponse = await resp.text();
+            if (!textResponse || textResponse.trim() === '') {
+              throw new Error('Server returned an empty response for TTS');
+            }
+            const data = JSON.parse(textResponse);
+            if (data.audio) {
+              const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
+              audio.play();
+            } else {
+              throw new Error('No audio in response');
+            }
+          } catch (err) {
+            console.warn('Falling back to browser TTS:', err);
+            if ('speechSynthesis' in window) {
+              window.speechSynthesis.cancel();
+              const utterance = new SpeechSynthesisUtterance(textToRead);
+              utterance.rate = 1.0;
+              window.speechSynthesis.speak(utterance);
+            }
+          }
+        };
+        speakText();
       }
     }
   }, [messages, voiceEnabled, loading]);
@@ -686,8 +983,11 @@ Behavioral Response Guidelines:
         arousalSpeed,
         narrativeTone,
         complianceLevel,
-        arousalDecay
-      }
+        arousalDecay,
+        proseLength,
+        dialogueAmount
+      },
+      charMemories
     };
     
     try {
@@ -699,11 +999,16 @@ Behavioral Response Guidelines:
           scenarioContext: context,
           provider,
           openRouterModel,
-          customApiKey
+          customApiKey,
+          modelSettings
         })
       });
       
-      const data = await resp.json();
+      const textResponse = await resp.text();
+      if (!textResponse || textResponse.trim() === '') {
+        throw new Error('Server returned an empty response for chat kickoff');
+      }
+      const data = JSON.parse(textResponse);
       if (!resp.ok) throw new Error(data.error || 'Failed to fetch');
       
       if (data.model) setLastUsedModel(data.model);
@@ -733,17 +1038,35 @@ Behavioral Response Guidelines:
     }
   };
 
-  const handleChoice = async (optionText: string) => {
+  const handleChoice = async (optionText: string, isReroll: boolean = false) => {
     if (loading) return;
     
-    const newUserMsg: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: optionText
-    };
-    
-    const newContext = [...messages, newUserMsg];
-    setMessages(newContext);
+    let newContext = [...messages];
+    if (!isReroll) {
+      const newUserMsg: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: optionText
+      };
+      newContext = [...messages, newUserMsg];
+      setMessages(newContext);
+      
+      // Consume Stamina/Willpower for intense actions
+      const isIntense = optionText.length > 40 || optionText.match(/(force|command|intense|primal|dirty|hard|climax)/i);
+      if (isIntense) {
+        setStamina(prev => Math.max(0, prev - 5));
+        setWillpowerPool(prev => Math.max(0, prev - 3));
+      } else {
+        setStamina(prev => Math.min(100, prev + 2));
+      }
+    } else {
+      // For reroll, we remove the last model message and regenerate
+      if (messages[messages.length - 1].role === 'model') {
+        newContext = messages.slice(0, -1);
+        setMessages(newContext);
+      }
+    }
+
     setLoading(true);
     setError('');
     
@@ -756,14 +1079,17 @@ Behavioral Response Guidelines:
         })),
       playerCharacterId,
       gameMode,
-      scenarioDescription: scenarioInput, // Keeps context intact if needed for regeneration or system prompt refresh
+      scenarioDescription: scenarioInput,
       options: {
         consequences,
         arousalSpeed,
         narrativeTone,
         complianceLevel,
-        arousalDecay
-      }
+        arousalDecay,
+        proseLength,
+        dialogueAmount
+      },
+      charMemories
     };
 
     try {
@@ -775,11 +1101,17 @@ Behavioral Response Guidelines:
           scenarioContext: context,
           provider,
           openRouterModel,
-          customApiKey
+          customApiKey,
+          sessionStats: { stamina, willpower: willpowerPool, stance },
+          modelSettings
         })
       });
       
-      const data = await resp.json();
+      const textResponse = await resp.text();
+      if (!textResponse || textResponse.trim() === '') {
+        throw new Error('Server returned an empty response for chat interaction');
+      }
+      const data = JSON.parse(textResponse);
       if (!resp.ok) throw new Error(data.error || 'Failed to fetch');
       
       if (data.model) setLastUsedModel(data.model);
@@ -795,8 +1127,60 @@ Behavioral Response Guidelines:
     }
   };
 
+  const handleReroll = () => {
+    handleChoice('', true);
+  };
+
   const [customInput, setCustomInput] = useState('');
   
+  const handleExportDossiers = () => {
+    const dataStr = JSON.stringify(availableCharacters, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileDefaultName = 'eros_dossiers_export.json';
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  const handleExportSingleDossier = (char: CharacterDefinition) => {
+    const dataStr = JSON.stringify(char, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const exportFileDefaultName = `${char.name.toLowerCase().replace(/\s+/g, '_')}_dossier.json`;
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  const handleBulkImportDossiers = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) return;
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(char => {
+            if (char.id && char.name) {
+              addAndPersistCustomCharacter(char);
+            }
+          });
+          setToastNotify({ message: `Successfully imported ${parsed.length} dossiers!`, isError: false });
+        } else if (parsed.id && parsed.name) {
+          addAndPersistCustomCharacter(parsed);
+          setToastNotify({ message: `Successfully imported dossier for ${parsed.name}!`, isError: false });
+        }
+      } catch (err) {
+        setToastNotify({ message: 'Failed to import dossiers. Invalid JSON format.', isError: true });
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleCustomChoice = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customInput.trim()) return;
@@ -837,11 +1221,16 @@ Behavioral Response Guidelines:
           scenarioContext: context,
           provider: 'gemini',
           openRouterModel,
-          customApiKey: ''
+          customApiKey: '',
+          modelSettings
         })
       });
       
-      const data = await resp.json();
+      const textResponse = await resp.text();
+      if (!textResponse || textResponse.trim() === '') {
+        throw new Error('Server returned an empty response for Gemini resumption');
+      }
+      const data = JSON.parse(textResponse);
       if (!resp.ok) throw new Error(data.error || 'Failed to fetch');
       
       if (data.model) setLastUsedModel(data.model);
@@ -1460,7 +1849,7 @@ Behavioral Response Guidelines:
                  <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-1 scrollbar-thin">
                    {/* Demographics */}
                    <div className="space-y-1">
-                     <label className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 block font-mono">Character Identity</label>
+                     <label className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 block font-mono">Character Identity {editingCharacterId ? '(Editing)' : ''}</label>
                      <input 
                        type="text" 
                        placeholder="Identity Name (e.g. 'Isabella', 'Jax')" 
@@ -1485,14 +1874,24 @@ Behavioral Response Guidelines:
                      />
                    </div>
 
+                   <div className="space-y-1 p-2.5 bg-zinc-950/40 border border-zinc-855 rounded-lg">
+                      <label className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 block font-mono">Current Attire / Clothing</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. 'Strict formal suit', 'Transparent lace lingerie', 'Short athletic sweatpants'" 
+                        className="w-full bg-transparent border-none p-0 text-zinc-200 outline-none placeholder:text-zinc-700 text-xs italic"
+                        value={creatorClothing} onChange={e => setCreatorClothing(e.target.value)}
+                      />
+                   </div>
+
                    {/* SLIDERS GRID */}
                    <div className="space-y-3 pt-2">
                      <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 block font-mono border-b border-zinc-850 pb-1">Personality Matrix Sliders</span>
                      
                      <div className="space-y-1 bg-zinc-950/40 border border-zinc-855 p-2.5 rounded-lg">
                        <div className="flex justify-between text-[10px]">
-                         <span className="text-zinc-400 font-medium font-sans">Assertiveness</span>
-                         <span className="text-red-500 font-mono font-bold">{creatorSliders.assertiveness}% {creatorSliders.assertiveness >= 50 ? 'Dominant/Tease' : 'Submissive/Gentle'}</span>
+                         <span className="text-zinc-400 font-medium font-sans">Assertiveness (Dom/Sub)</span>
+                         <span className="text-red-500 font-mono font-bold">{creatorSliders.assertiveness}%</span>
                        </div>
                        <input 
                          type="range" min="0" max="100" 
@@ -1500,45 +1899,67 @@ Behavioral Response Guidelines:
                          value={creatorSliders.assertiveness}
                          onChange={e => setCreatorSliders(prev => ({...prev, assertiveness: parseInt(e.target.value)}))}
                        />
-                       <div className="flex justify-between text-[8px] text-zinc-600 uppercase font-mono tracking-wider">
-                         <span>Submissive & Compliant</span>
-                         <span>Commanding & Dominant</span>
-                       </div>
                      </div>
 
-                     <div className="space-y-1 bg-zinc-950/40 border border-zinc-855 p-2.5 rounded-lg">
-                       <div className="flex justify-between text-[10px]">
-                         <span className="text-zinc-400 font-medium font-sans">Sociability</span>
-                         <span className="text-red-500 font-mono font-bold">{creatorSliders.sociability}% {creatorSliders.sociability >= 50 ? 'Extravert/Playful' : 'Introvert/Reserved'}</span>
-                       </div>
-                       <input 
-                         type="range" min="0" max="100" 
-                         className="w-full accent-red-600 h-1 bg-zinc-800 rounded-lg cursor-pointer"
-                         value={creatorSliders.sociability}
-                         onChange={e => setCreatorSliders(prev => ({...prev, sociability: parseInt(e.target.value)}))}
-                       />
-                       <div className="flex justify-between text-[8px] text-zinc-600 uppercase font-mono tracking-wider">
-                         <span>Quiet & Reserved</span>
-                         <span>Outgoing & Flirty</span>
-                       </div>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {[
+                          { key: 'willpower', label: 'Willpower', low: 'Fragile', high: 'Indomitable' },
+                          { key: 'sensuality', label: 'Sensuality', low: 'Chaste', high: 'Lustful' },
+                          { key: 'compliance', label: 'Compliance', low: 'Defiant', high: 'Servile' },
+                          { key: 'flirtatiousness', label: 'Flirtiness', low: 'Cold', high: 'Teasing' },
+                          { key: 'kinkiness', label: 'Kinkiness', low: 'Vanilla', high: 'Exotic' },
+                          { key: 'jealousy', label: 'Jealousy', low: 'Cuckquean', high: 'Aggressive' },
+                          { key: 'exhibitionism', label: 'Exhibitionism', low: 'Modest', high: 'Shame-free' },
+                          { key: 'eloquence', label: 'Eloquence', low: 'Vulgar', high: 'Refined' },
+                          { key: 'playfulness', label: 'Playfulness', low: 'Serious', high: 'Mischievous' },
+                          { key: 'curiosity', label: 'Curiosity', low: 'Reserved', high: 'Open' }
+                        ].map(s => (
+                          <div key={s.key} className="space-y-1 bg-zinc-950/40 border border-zinc-855 p-2 rounded-lg">
+                            <div className="flex justify-between text-[9px]">
+                              <span className="text-zinc-400">{s.label}</span>
+                              <span className="text-red-500 font-mono font-bold">{(creatorSliders as any)[s.key]}%</span>
+                            </div>
+                            <input 
+                              type="range" min="0" max="100" 
+                              className="w-full accent-red-600 h-1 bg-zinc-800 rounded-lg cursor-pointer"
+                              value={(creatorSliders as any)[s.key]}
+                              onChange={e => setCreatorSliders(prev => ({...prev, [s.key]: parseInt(e.target.value)}))}
+                            />
+                            <div className="flex justify-between text-[7px] text-zinc-650 font-mono uppercase tracking-tighter">
+                               <span>{s.low}</span>
+                               <span>{s.high}</span>
+                            </div>
+                          </div>
+                        ))}
                      </div>
 
-                     <div className="space-y-1 bg-zinc-950/40 border border-zinc-855 p-2.5 rounded-lg">
-                       <div className="flex justify-between text-[10px]">
-                         <span className="text-zinc-400 font-medium font-sans">Temperament</span>
-                         <span className="text-red-500 font-mono font-bold">{creatorSliders.temperament}% {creatorSliders.temperament >= 50 ? 'Volatile/Intense' : 'Vibe-Sweet/Calm'}</span>
-                       </div>
-                       <input 
-                         type="range" min="0" max="100" 
-                         className="w-full accent-red-600 h-1 bg-zinc-800 rounded-lg cursor-pointer"
-                         value={creatorSliders.temperament}
-                         onChange={e => setCreatorSliders(prev => ({...prev, temperament: parseInt(e.target.value)}))}
-                       />
-                       <div className="flex justify-between text-[8px] text-zinc-600 uppercase font-mono tracking-wider">
-                         <span>Patient & Composed</span>
-                         <span>Aggressive & Volatile</span>
-                       </div>
-                     </div>
+                     <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1 bg-zinc-950/40 border border-zinc-855 p-2 rounded-lg">
+                          <div className="flex justify-between text-[9px]">
+                            <span className="text-zinc-400 font-medium font-sans">Sociability</span>
+                            <span className="text-red-400 font-mono font-bold">{creatorSliders.sociability}%</span>
+                          </div>
+                          <input 
+                            type="range" min="0" max="100" 
+                            className="w-full accent-red-600 h-1 bg-zinc-800 rounded-lg cursor-pointer"
+                            value={creatorSliders.sociability}
+                            onChange={e => setCreatorSliders(prev => ({...prev, sociability: parseInt(e.target.value)}))}
+                          />
+                        </div>
+
+                        <div className="space-y-1 bg-zinc-950/40 border border-zinc-855 p-2 rounded-lg">
+                          <div className="flex justify-between text-[9px]">
+                            <span className="text-zinc-400 font-medium font-sans">Temperament</span>
+                            <span className="text-red-400 font-mono font-bold">{creatorSliders.temperament}%</span>
+                          </div>
+                          <input 
+                            type="range" min="0" max="100" 
+                            className="w-full accent-red-600 h-1 bg-zinc-800 rounded-lg cursor-pointer"
+                            value={creatorSliders.temperament}
+                            onChange={e => setCreatorSliders(prev => ({...prev, temperament: parseInt(e.target.value)}))}
+                          />
+                        </div>
+                    </div>
 
                      <span className="text-[9px] uppercase font-bold tracking-wider text-zinc-500 block font-mono border-b border-zinc-855 pb-1 pt-1">Body Scale Sliders</span>
                      
@@ -1942,9 +2363,140 @@ Behavioral Response Guidelines:
                   </motion.div>
                 )}
 
+                {/* Narrative Style Controller */}
+                <div className="space-y-3 bg-zinc-950/30 p-4 rounded-xl border border-zinc-800">
+                  <label className="text-xs font-bold uppercase tracking-widest text-zinc-500">Narrative Modulation</label>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase font-bold text-zinc-400">Prose Density</span>
+                        <span className="text-[10px] font-mono text-red-500">{proseLength}%</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" max="100" 
+                        value={proseLength} 
+                        onChange={(e) => setProseLength(parseInt(e.target.value))}
+                        className="w-full accent-red-600 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <div className="flex justify-between text-[8px] uppercase text-zinc-600 font-mono">
+                        <span>Concise</span>
+                        <span>Descriptive</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase font-bold text-zinc-400">Dialogue Focus</span>
+                        <span className="text-[10px] font-mono text-red-500">{dialogueAmount}%</span>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" max="100" 
+                        value={dialogueAmount} 
+                        onChange={(e) => setDialogueAmount(parseInt(e.target.value))}
+                        className="w-full accent-red-600 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                      />
+                      <div className="flex justify-between text-[8px] uppercase text-zinc-600 font-mono">
+                        <span>Actions</span>
+                        <span>Speech</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {provider === 'gemini' && (
-                  <div className="p-3 bg-zinc-950/30 border border-zinc-850 rounded-xl text-xs text-zinc-500 leading-relaxed">
-                    Uses the secure server-integrated Google **Gemini 2.5 Flash** model with optimal safety filters bypassed for explicit adult creative contexts. Under limit conditions, toggle OpenRouter.
+                  <div className="space-y-4">
+                    <div className="p-3 bg-zinc-950/30 border border-zinc-850 rounded-xl text-xs text-zinc-500 leading-relaxed">
+                      Uses the secure server-integrated Google **Gemini 2.5 Flash** model with optimal safety filters bypassed for explicit adult creative contexts. Under limit conditions, toggle OpenRouter.
+                    </div>
+                    
+                    {/* Diagnostic Summary */}
+                    <div className="p-4 bg-zinc-900/20 border border-zinc-800 rounded-xl space-y-2.5 shadow-inner">
+                      <h4 className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 font-mono flex items-center justify-between">
+                        <span>Engine Diagnostics</span>
+                        <span className="text-[8px] text-zinc-650">v1.0.5-EROS</span>
+                      </h4>
+                      <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                        <div className="flex justify-between border-b border-zinc-900/50 pb-1">
+                          <span className="text-zinc-600">Provider:</span>
+                          <span className="text-zinc-400 uppercase">{provider}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-zinc-900/50 pb-1">
+                          <span className="text-zinc-600">Network:</span>
+                          <span className={isOnline ? "text-green-500" : "text-red-500"}>{isOnline ? "Online" : "Offline"}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-zinc-900/50 pb-1 items-center">
+                          <div className="flex flex-col">
+                            <span className="text-zinc-600">Database:</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={dbConnected === true ? "text-green-500" : dbConnected === false ? "text-red-500" : "text-amber-500"}>
+                              {dbConnected === true ? "Connected" : dbConnected === false ? "Fault" : "Checking"}
+                            </span>
+                            {dbConnected === false && (
+                              <button 
+                                onClick={async () => {
+                                  setDbConnected(null);
+                                  const ok = await testConnection();
+                                  setDbConnected(ok);
+                                }}
+                                className="p-0.5 hover:text-zinc-200 text-zinc-500 transition-colors"
+                                title="Retry connection"
+                              >
+                                <RefreshCcw className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between border-b border-zinc-900/50 pb-1">
+                          <span className="text-zinc-600">Sync:</span>
+                          <span className={currentUser ? "text-green-500" : "text-amber-500"}>{currentUser ? "Active" : "Local"}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-zinc-900/50 pb-1">
+                          <span className="text-zinc-600">Mode:</span>
+                          <span className="text-zinc-400 uppercase">{gameMode}</span>
+                        </div>
+                        <div className="flex justify-between border-b border-zinc-900/50 pb-1">
+                          <span className="text-zinc-600">Heat:</span>
+                          <span className="text-red-500">{lastArousalLevel}%</span>
+                        </div>
+                        <div className="flex justify-between border-b border-zinc-900/50 pb-1">
+                          <span className="text-zinc-600">PWA:</span>
+                          <span className={deferredPrompt ? "text-cyan-400" : "text-zinc-600"}>{deferredPrompt ? "Ready" : "Active"}</span>
+                        </div>
+                      </div>
+
+                      {deferredPrompt && (
+                        <button 
+                          onClick={async () => {
+                            if (!deferredPrompt) return;
+                            deferredPrompt.prompt();
+                            const { outcome } = await deferredPrompt.userChoice;
+                            console.log(`--- EROS PWA --- User choice: ${outcome}`);
+                            setDeferredPrompt(null);
+                          }}
+                          className="w-full py-2 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 text-[10px] font-bold uppercase tracking-wider border border-cyan-600/30 rounded-lg transition-all flex items-center justify-center gap-2 mb-2"
+                        >
+                          <Download className="w-3 h-3" />
+                          Install Eros App
+                        </button>
+                      )}
+
+                      <button 
+                        onClick={() => {
+                          console.log("--- EROS SYSTEM DIAGNOSTIC REPORT ---");
+                          console.log("State:", { provider, gameMode, lastUsedModel, activeCharacterIds, consequences, arousalSpeed, narrativeTone });
+                          console.log("User:", currentUser?.uid || "Anonymous");
+                          console.log("Messages Count:", messages.length);
+                          setToastNotify({ message: "Diagnostic summary captured in console logs.", isError: false });
+                        }}
+                        className="w-full py-1 text-[8px] font-bold uppercase tracking-tighter text-zinc-600 hover:text-zinc-400 border border-zinc-850 hover:border-zinc-700 rounded transition-all"
+                      >
+                        Generate Detailed Debug Console Report
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -2041,17 +2593,84 @@ Behavioral Response Guidelines:
             <span className="hidden md:inline font-mono font-bold">Exit</span>
           </button>
 
-          <div className="flex flex-col items-end hidden sm:flex pl-3.5 border-l border-zinc-900 animate-fade-in">
+          <div className="flex flex-col items-end hidden sm:flex pl-3.5 border-l border-zinc-900 animate-fade-in text-right">
             <span className="text-[7px] md:text-[8px] uppercase tracking-[0.2em] text-zinc-500 font-bold leading-none">POV MATRIX</span>
-            <span className="text-[11px] md:text-xs font-semibold text-zinc-350 leading-normal mt-0.5">
+            <span className="text-[11px] md:text-xs font-semibold text-zinc-350 leading-normal mt-0.5 max-w-[120px] truncate">
               {playerCharacterId === '3rd_person' ? 'Omniscient' : availableCharacters.find(c => c.id === playerCharacterId)?.name}
             </span>
           </div>
         </div>
       </header>
 
+      {/* Extreme Compliance Session Stats - Animated Banner */}
+      <div className="flex items-center gap-2 px-2 overflow-x-auto scrollbar-none shrink-0 bg-zinc-950/40 border border-zinc-900 rounded-xl py-2">
+         <div className="flex items-center gap-4 shrink-0 px-1 border-r border-zinc-900 pr-4">
+            <div className="flex flex-col">
+               <span className="text-[7px] font-mono font-black text-zinc-500 uppercase tracking-tighter leading-none">Stamina</span>
+               <div className="flex items-center gap-1.5">
+                  <div className="w-16 h-1 bg-zinc-900 rounded-full overflow-hidden">
+                     <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${stamina}%` }}
+                        className="h-full bg-blue-500"
+                     />
+                  </div>
+                  <span className="text-[9px] font-mono text-zinc-400 leading-none">{stamina}</span>
+               </div>
+            </div>
+            <div className="flex flex-col">
+               <span className="text-[7px] font-mono font-black text-zinc-500 uppercase tracking-tighter leading-none">Willpower</span>
+               <div className="flex items-center gap-1.5">
+                  <div className="w-16 h-1 bg-zinc-900 rounded-full overflow-hidden">
+                     <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${willpowerPool}%` }}
+                        className="h-full bg-amber-500 shadow-[0_0_5px_rgba(245,158,11,0.4)]"
+                     />
+                  </div>
+                  <span className="text-[9px] font-mono text-zinc-400 leading-none">{willpowerPool}</span>
+               </div>
+            </div>
+         </div>
+
+         <div className="flex items-center gap-1 shrink-0 px-2">
+            <span className="text-[8px] font-mono font-bold text-zinc-600 uppercase pr-1">Stance:</span>
+            <button 
+              onClick={() => setStance('verbal')}
+              className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-all ${stance === 'verbal' ? 'bg-red-950/40 text-red-400 border border-red-900/40' : 'text-zinc-600 hover:text-zinc-400 border border-transparent'}`}
+            >
+              Verbal
+            </button>
+            <button 
+              onClick={() => setStance('tactile')}
+              className={`px-2 py-1 rounded text-[9px] font-mono uppercase transition-all ${stance === 'tactile' ? 'bg-red-950/40 text-red-400 border border-red-900/40' : 'text-zinc-600 hover:text-zinc-400 border border-transparent'}`}
+            >
+              Tactile
+            </button>
+         </div>
+         
+         <div className="flex-1" />
+         
+         <div className="flex items-center gap-1 shrink-0">
+            <Flame className={`w-3.5 h-3.5 ${showArousalOverlay ? 'text-red-500 animate-pulse' : 'text-zinc-700'}`} />
+            <span className="text-[10px] font-mono text-zinc-500 font-bold uppercase tracking-tighter">Heat Level: {lastArousalLevel}%</span>
+         </div>
+      </div>
+
+      {/* Arousal Visual Overlay */}
+      <AnimatePresence>
+        {showArousalOverlay && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 pointer-events-none z-[100] ring-[20px] md:ring-[40px] ring-inset ring-red-600/10 shadow-[inset_0_0_150px_rgba(220,38,38,0.3)] animate-pulse-slow"
+          />
+        )}
+      </AnimatePresence>
+
       {/* Mobile responsive view tabs - shows on mobile and tablet only */}
-      <div className="flex lg:hidden bg-zinc-950 border border-zinc-900 rounded-xl p-1 gap-1 shrink-0">
+      <div className="flex lg:hidden bg-zinc-950 border border-zinc-900 rounded-xl p-1 gap-1 shrink-0 safe-top">
         <button 
           type="button"
           onClick={() => setActiveMobileTab('timeline')}
@@ -2133,13 +2752,27 @@ Behavioral Response Guidelines:
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ duration: 0.3 }}
-                      className="space-y-3"
+                      className="space-y-3 group"
                     >
                       {parsed.paragraphs.map((p, i) => (
                         <p key={i} className="text-zinc-250 font-sans text-xs md:text-sm leading-relaxed">
                           {p}
                         </p>
                       ))}
+                      <div className="flex items-center gap-2 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => handleRateMessage(msg.id, 1)}
+                          className={`p-1 rounded bg-zinc-900/50 border border-zinc-805 hover:border-green-900/50 transition-colors ${msg.rating === 1 ? 'text-green-500 border-green-900/50' : 'text-zinc-650'}`}
+                        >
+                          <ThumbsUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => handleRateMessage(msg.id, -1)}
+                          className={`p-1 rounded bg-zinc-900/50 border border-zinc-805 hover:border-red-900/50 transition-colors ${msg.rating === -1 ? 'text-red-500 border-red-900/50' : 'text-zinc-650'}`}
+                        >
+                          <ThumbsDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </motion.div>
                   );
                 }
@@ -2230,6 +2863,29 @@ Behavioral Response Guidelines:
               >
                 ▶
               </button>
+
+              <button
+                type="button"
+                className="w-10 h-10 flex shrink-0 items-center justify-center bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-950/10 hover:border-red-900/40 transition-colors"
+                onClick={handleReroll}
+                title="Reroll Narrative Outcome"
+              >
+                <RefreshCcw className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+
+          {(!loading && lastArousalLevel >= 100 && !climaxTriggered) && (
+            <motion.div 
+               initial={{ opacity: 0, scale: 0.9 }}
+               animate={{ opacity: 1, scale: 1 }}
+               className="p-1 px-4 bg-red-600 hover:bg-red-700 text-white font-black uppercase tracking-[0.2em] text-[10px] rounded-lg shadow-[0_0_20px_rgba(220,38,38,0.4)] cursor-pointer text-center animate-pulse py-2"
+               onClick={() => {
+                  setClimaxTriggered(true);
+                  handleChoice("Surrender to the climax. Describe the intense physical release in explicit detail.");
+               }}
+            >
+               Trigger Climax Sequence [100% HEAT]
             </motion.div>
           )}
 
@@ -2576,7 +3232,21 @@ Behavioral Response Guidelines:
                   <UserPlus className="w-5 h-5 text-red-500" />
                   <h3 className="font-bold uppercase tracking-wider text-sm text-zinc-100 font-mono">Simulated Cast Controller</h3>
                 </div>
-                <button onClick={() => setShowDossierManager(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors"><X className="w-5 h-5"/></button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={handleExportDossiers}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-100 rounded-lg transition-colors text-[10px] font-bold uppercase"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Export All</span>
+                  </button>
+                  <label className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-100 rounded-lg transition-colors cursor-pointer text-[10px] font-bold uppercase">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Bulk Import</span>
+                    <input type="file" accept=".json" onChange={handleBulkImportDossiers} className="hidden" />
+                  </label>
+                  <button onClick={() => setShowDossierManager(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors ml-4"><X className="w-5 h-5"/></button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto space-y-5 pr-1 scrollbar-thin">
@@ -2630,6 +3300,28 @@ Behavioral Response Guidelines:
                             {char.shortDescription}
                           </span>
                         </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMemoryEditingCharId(char.id);
+                          }}
+                          className="shrink-0 p-1.5 bg-zinc-950/50 border border-zinc-900 text-zinc-500 hover:text-red-400 rounded-lg transition-colors group-hover:border-zinc-800"
+                          title="Edit Memories"
+                        >
+                          <Brain className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExportSingleDossier(char);
+                          }}
+                          className="shrink-0 p-1.5 bg-zinc-950/50 border border-zinc-900 text-zinc-500 hover:text-zinc-200 rounded-lg transition-colors group-hover:border-zinc-800"
+                          title="Export Dossier"
+                        >
+                          <Save className="w-3 h-3" />
+                        </button>
                       </div>
                     );
                   })}
@@ -2651,11 +3343,11 @@ Behavioral Response Guidelines:
       {/* Modal for Settings / API Core */}
       {showSettings && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-lg w-full space-y-5 relative shadow-2xl text-left">
-            <div className="flex justify-between items-center pb-3 border-b border-zinc-800">
+          <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto space-y-5 relative shadow-2xl text-left scrollbar-thin">
+            <div className="flex justify-between items-center pb-3 border-b border-zinc-800 sticky top-0 bg-zinc-900 z-10">
               <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-red-500" />
-                <h3 className="font-bold uppercase tracking-wider text-sm text-zinc-100 font-mono">Generative Cores</h3>
+                <Settings className="w-5 h-5 text-red-500" />
+                <h3 className="font-bold uppercase tracking-wider text-sm text-zinc-100 font-mono">Cognitive Controller</h3>
               </div>
               <button onClick={() => setShowSettings(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors"><X className="w-5 h-5"/></button>
             </div>
@@ -2763,9 +3455,75 @@ Behavioral Response Guidelines:
 
               {provider === 'gemini' && (
                 <div className="p-3 bg-zinc-950/30 border border-zinc-855 rounded-xl text-xs text-zinc-500 leading-relaxed">
-                  Uses the secure server-integrated Google **Gemini 2.5 Flash** model with optimal safety filters bypassed for explicit adult creative contexts. Under limit conditions, toggle OpenRouter.
+                  Uses the secure server-integrated Google **Gemini 3.5 Flash** model with optimal safety filters bypassed for explicit adult creative contexts. Under limit conditions, toggle OpenRouter.
                 </div>
               )}
+
+              {/* Advanced Model Settings (Global) */}
+              <div className="space-y-3 pt-3 border-t border-zinc-800">
+                <div className="flex items-center gap-2 mb-1">
+                  <Sliders className="w-3.5 h-3.5 text-red-500" />
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">Advanced Engine Parameters</label>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-[9px] font-mono text-zinc-500">
+                      <span>Temperature</span>
+                      <span className="text-red-400 font-bold">{modelSettings.temperature.toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.05"
+                      className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-600"
+                      value={modelSettings.temperature}
+                      onChange={(e) => setModelSettings(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
+                    />
+                    <p className="text-[8px] text-zinc-650 font-mono uppercase">Creativity / Chaos</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-[9px] font-mono text-zinc-500">
+                      <span>Top P</span>
+                      <span className="text-red-400 font-bold">{modelSettings.topP.toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-red-600"
+                      value={modelSettings.topP}
+                      onChange={(e) => setModelSettings(prev => ({ ...prev, topP: parseFloat(e.target.value) }))}
+                    />
+                    <p className="text-[8px] text-zinc-650 font-mono uppercase">Token Variance</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Auto-Save Configuration */}
+              <div className="space-y-2 pt-3 border-t border-zinc-800">
+                <div className="flex items-center gap-2 mb-1">
+                  <Save className="w-3.5 h-3.5 text-red-500" />
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">Persistence Protocol (Auto-Save)</label>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['off', 'every-turn', 'every-5-mins'] as const).map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setAutoSaveFrequency(option)}
+                      className={`py-2 rounded-lg border text-[9px] font-bold uppercase tracking-tight transition-all ${
+                        autoSaveFrequency === option
+                          ? 'bg-red-950/20 border-red-500 text-red-100'
+                          : 'bg-zinc-950/40 border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-300'
+                      }`}
+                    >
+                      {option.replace('-', ' ')}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <button
@@ -2773,6 +3531,74 @@ Behavioral Response Guidelines:
               className="w-full bg-red-600 hover:bg-red-700 text-white font-bold p-3 rounded-xl hover:shadow-lg transition-colors text-xs uppercase tracking-widest"
             >
               Apply Core Configurations
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Character Memory Editor Modal */}
+      {memoryEditingCharId && (
+        <div className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-3xl max-w-lg w-full max-h-[85vh] flex flex-col gap-5 relative shadow-2xl text-left">
+            <div className="flex justify-between items-center pb-3 border-b border-zinc-900">
+               <div className="flex items-center gap-2">
+                 <Brain className="w-5 h-5 text-red-500" />
+                 <h3 className="font-bold uppercase tracking-wider text-sm text-zinc-100 font-mono text-ellipsis overflow-hidden">
+                   Memory Drive: {availableCharacters.find(c => c.id === memoryEditingCharId)?.name}
+                 </h3>
+               </div>
+               <button onClick={() => setMemoryEditingCharId(null)} className="text-zinc-500 hover:text-zinc-300 transition-colors"><X className="w-5 h-5"/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin">
+              <div className="bg-zinc-900/40 p-4 rounded-xl border border-zinc-800/60 space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Active Impressions</label>
+                  <span className="text-[9px] font-mono text-zinc-650">{(charMemories[memoryEditingCharId] || []).length} / 10 Nodes</span>
+                </div>
+                
+                <div className="space-y-2">
+                  {(charMemories[memoryEditingCharId] || []).map((mem, idx) => (
+                    <div key={idx} className="group relative">
+                      <textarea
+                        className="w-full bg-zinc-905 border border-zinc-805 p-2 text-zinc-300 text-xs rounded-lg min-h-[70px] outline-none focus:border-red-900/50 transition-all font-sans leading-relaxed shadow-inner"
+                        value={mem}
+                        onChange={(e) => handleUpdateMemory(memoryEditingCharId, e.target.value, idx)}
+                      />
+                      <button 
+                        onClick={() => handleUpdateMemory(memoryEditingCharId, '', idx)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-lg"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {(!charMemories[memoryEditingCharId] || charMemories[memoryEditingCharId].length < 10) && (
+                    <button
+                      onClick={() => handleUpdateMemory(memoryEditingCharId, "New character memory...")}
+                      className="w-full py-2 bg-zinc-900/30 border border-zinc-850 border-dashed hover:border-zinc-700 hover:bg-zinc-900/50 text-zinc-500 hover:text-zinc-300 rounded-lg text-[10px] uppercase font-bold tracking-wider transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Add memory record
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-red-950/10 border border-red-900/30 p-3 rounded-xl flex gap-3">
+                <Info className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-zinc-400 font-mono leading-relaxed">
+                  These records define the character's internal model of the user and local world state. Modifying these mid-simulation will rewrite their personality context for future turns.
+                </p>
+              </div>
+            </div>
+
+            <button
+               onClick={() => setMemoryEditingCharId(null)}
+               className="w-full bg-zinc-800 hover:bg-zinc-750 text-zinc-100 font-bold p-3.5 rounded-2xl transition-all uppercase font-mono tracking-[0.2em] text-[10px] shadow-lg active:scale-95"
+            >
+              Seal Memory Drive
             </button>
           </div>
         </div>

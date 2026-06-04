@@ -71,6 +71,19 @@
   .bg-zinc-805 { background-color: rgb(39 39 42); }
   .bg-zinc-905 { background-color: rgb(24 24 27); }
 
+  .animate-pulse-slow {
+    animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
   .hover\:bg-zinc-750:hover { background-color: rgb(63 63 70); }
   .hover\:bg-zinc-805:hover { background-color: rgb(39 39 42); }
   .hover\:bg-zinc-955:hover { background-color: rgb(9 9 11); }

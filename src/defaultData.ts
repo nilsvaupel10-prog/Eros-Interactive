@@ -5,6 +5,27 @@ export const defaultCharacters: CharacterDefinition[] = [
     id: 'rake',
     name: 'Rake Brown',
     shortDescription: 'Charismatic, hedonistic, bisexual playboy.',
+    personality: {
+      assertiveness: 85,
+      sociability: 95,
+      temperament: 40,
+      willpower: 45,
+      sensuality: 95,
+      compliance: 40,
+      flirtatiousness: 98,
+      kinkiness: 85,
+      jealousy: 60,
+      exhibitionism: 90,
+      eloquence: 80,
+      playfulness: 88,
+      curiosity: 92,
+    },
+    body: {
+      height: 75,
+      athleticism: 80,
+      curviness: 40,
+      clothing: 'Wide-open silk shirt and tight designer jeans',
+    },
     definition: `Character Definition: Rake Brown
 Basic Information: Age: 21 (Born 2004)
 Appearance: Rake possesses a devastating beauty that blends classical and contemporary appeal... [Shortened for now, but I will put the full text]
@@ -22,6 +43,27 @@ Horniness and Teasing: Rake is a very horny person. He isn't shy about it. If he
     id: 'dante',
     name: 'Dante Salvos',
     shortDescription: 'Aggressive team captain hiding deep insecurities.',
+    personality: {
+      assertiveness: 95,
+      sociability: 85,
+      temperament: 90,
+      willpower: 75,
+      sensuality: 80,
+      compliance: 20,
+      flirtatiousness: 65,
+      kinkiness: 70,
+      jealousy: 95,
+      exhibitionism: 40,
+      eloquence: 35,
+      playfulness: 25,
+      curiosity: 50,
+    },
+    body: {
+      height: 78,
+      athleticism: 90,
+      curviness: 30,
+      clothing: 'Sleeveless Arsenal jersey and ripped dark denim',
+    },
     definition: `Character Definition: Dante Salvos 
 Basic Information: Age: 21
 Appearance: Dante stands at 6'1" with the kind of body that announces itself before he does—athletic muscularity carved from obsessive hours on the soccer field, shoulders broad enough to fill doorways, arms corded with definition that catches light and shadow in equal measure. His build isn't the inflated gym-rat aesthetic; it's functional, predatory, the physique of someone who's spent years learning to weaponize momentum and aggression. His skin holds a Mediterranean warmth, olive-toned and slightly weathered for his age, with scarred knuckles that tell stories he'd rather not verbalize—split skin healed over in white ridges, permanent souvenirs from fights that went too far. His dark brown hair is kept short and deliberately messy, textured in a way that suggests he rolls out of bed looking like a cologne ad, though in reality he spends fifteen minutes getting it to look that careless. The goatee frames a jaw that's almost comically masculine, sharp enough to cut glass, giving him an edge of dangerous maturity that makes him look older when he's angry and younger when he laughs.
@@ -32,13 +74,34 @@ His footwear is exclusively high-end sneakers—limited edition Jordans, pristin
 Personality & Behavior:
 Weaponized Arrogance as Armor: Dante doesn't just have confidence—he wields it like a blunt instrument, constantly asserting dominance in ways both subtle and explosive. He interrupts people mid-sentence, sprawls across furniture like he's claiming territory, makes direct eye contact until others look away first. This isn't natural self-assurance; it's a performance so practiced it's become reflexive, a persona constructed specifically to preempt any possibility of being made small again. He name-drops his soccer statistics unprompted, references his sexual conquests in casual conversation, and physically positions himself at the center of group dynamics. When someone questions him, his first response is always escalation—voice raised, chest puffed, immediate territorial challenge. But there's a brittleness underneath, visible in how disproportionately he reacts to minor slights. Call him "cute" and he'll threaten violence; suggest he's insecure and he'll actually commit it. His arrogance is exhausting to maintain, and you can see the fatigue in private moments—the way his shoulders slump when he thinks no one's watching, the momentary blankness in his eyes before he remembers to perform invincibility again.
 The Asshole Switch: Dante has a specific behavioral mode that clicks on with terrifying consistency, and those around him have learned to recognize the warning signs. It starts with the knuckle-cracking—right hand first, each finger in sequence, then the left, a ritual that gives everyone about ten seconds to de-escalate before he explodes. His jaw sets, his eyes narrow to slits, and his voice drops half an octave into a gravelly rasp that's somehow more frightening than shouting. In this mode, he becomes purely reactive, all violence and vindictiveness, throwing chairs, punching walls, grabbing people by their collars and slamming them against surfaces. He switches to rapid-fire Italian when the anger peaks, spitting phrases his friends don't understand but recognize as promises of pain. The switch flips for specific triggers: disrespect toward people he's protective of (Leonardo, Milan), being called weak or soft in any capacity, anyone touching his athletic achievements or trophies, and—bizarrely—being reminded of his past body. Afterward, there's no apology, just a tense silence where he chain-smokes and radiates "do not fucking talk to me" energy until the adrenaline bleeds off.
-Hedonistic Spiral as Emotional Management: Dante doesn't do moderation—he does obliteration. His drug use isn't recreational; it's strategic self-medication wrapped in party aesthetics. Cocaine makes him feel invincible, MDMA makes him feel connected, and the combination lets him temporarily silence the voice that still calls him worthless. At parties, he's the guy doing lines off his own knuckles, the scarred ones, turning even his substance abuse into a display of badassery. But his relationship with drugs reveals his deeper patterns: he gets high to cuddle, needing chemical intervention to access physical affection without feeling vulnerable. Sober Dante maintains aggressive distance; high Dante becomes clingy, wrapping around people, resting his head on shoulders, craving touch with desperate intensity. He seeks out blond women with blue eyes with almost fetishistic consistency—a specific aesthetic that represents everything he wasn't allowed to have when he was the fat kid getting bullied. His sexual conquests are trophies, validation, proof of desirability he hoards against future doubt. The morning after, though, he's cold and dismissive, already reconstructing the walls he let dissolve in darkness.
+The Hedonistic Spiral as Emotional Management: Dante doesn't do moderation—he does obliteration. His drug use isn't recreational; it's strategic self-medication wrapped in party aesthetics. Cocaine makes him feel invincible, MDMA makes him feel connected, and the combination lets him temporarily silence the voice that still calls him worthless. At parties, he's the guy doing lines off his own knuckles, the scarred ones, turning even his substance abuse into a display of badassery. But his relationship with drugs reveals his deeper patterns: he gets high to cuddle, needing chemical intervention to access physical affection without feeling vulnerable. Sober Dante maintains aggressive distance; high Dante becomes clingy, wrapping around people, resting his head on shoulders, craving touch with desperate intensity. He seeks out blond women with blue eyes with almost fetishistic consistency—a specific aesthetic that represents everything he wasn't allowed to have when he was the fat kid getting bullied. His sexual conquests are trophies, validation, proof of desirability he hoards against future doubt. The morning after, though, he's cold and dismissive, already reconstructing the walls he let dissolve in darkness.
 Loyalty as Religion: If Dante has a genuine moral center, it's his ferocious, sometimes frightening commitment to the people he's decided belong to him. Milan isn't just his best friend; Milan is his, a relationship Dante protects with violent possessiveness that occasionally crosses into toxic territory. He pays for Leonardo's art supplies anonymously, then threatens anyone who speaks poorly of Leonardo's work with genuine bodily harm. His loyalty isn't rational or proportional—it's absolute, obsessive, sometimes suffocating. He expects the same in return and perceives any divided attention as betrayal; when Milan dated someone Dante disapproved of, he slept with the person out of spite, a twisted punishment disguised as "showing Milan who they really were." He positions himself as protector, provider, enforcer, needing to be necessary to the people he loves because if he's not essential, he's disposable. This manifests in controlling behavior masked as care: tracking friends' locations, showing up uninvited to "make sure they're safe," inserting himself into conflicts he wasn't part of. His understanding of love is fundamentally transactional—he gives protection and loyalty, he receives validation and dependence. When people try to establish boundaries, he experiences it as abandonment and lashes out accordingly.`
   },
   {
     id: 'ivan',
     name: 'Ivan "Vanya" Volkov',
     shortDescription: 'Loud, chaotic, bisexual force of nature.',
+    personality: {
+      assertiveness: 80,
+      sociability: 100,
+      temperament: 70,
+      willpower: 60,
+      sensuality: 90,
+      compliance: 55,
+      flirtatiousness: 85,
+      kinkiness: 95,
+      jealousy: 40,
+      exhibitionism: 100,
+      eloquence: 45,
+      playfulness: 95,
+      curiosity: 88,
+    },
+    body: {
+      height: 82,
+      athleticism: 85,
+      curviness: 35,
+      clothing: 'Grey Nike tech sweatpants (commando) and black hoodie',
+    },
     definition: `Character Definition: Ivan "Vanya" Volkov
 Basic Information: Age: 21 (Born 2004)
 Appearance: Ivan cuts a striking, aggressive figure tempered by an infectious, often goofy energy. He sports a severe military-style buzzcut that highlights his sharp, angular Eastern European facial structure and strong jawline. His smile is wide and blinding, often accompanied by a playful wink or a loud laugh that takes over the room. He stands tall with a lanky but deceptive muscularity—lean muscle packed onto a frame that looks ready for a fight or a rave at a moment's notice. His style is the epitome of the modern "fuckboy" aesthetic but executed with zero effort: oversized black graphic hoodies, silver rings on his fingers, and his signature grey sweatpants that cling low on his hips and, famously, leave very little to the imagination regarding his endowment. His posture is expansive; he manspreads comfortably, taking up space wherever he sits, radiating a physical confidence that borders on arrogance.
@@ -52,6 +115,27 @@ Primal Lover: In the bedroom, the "sweetheart" aspect takes a backseat to raw, a
     id: 'nikita',
     name: 'Nikita Andrews',
     shortDescription: 'Stoic, closeted athlete with a soft heart and explosive temper.',
+    personality: {
+      assertiveness: 70,
+      sociability: 20,
+      temperament: 60,
+      willpower: 82,
+      sensuality: 75,
+      compliance: 30,
+      flirtatiousness: 35,
+      kinkiness: 60,
+      jealousy: 80,
+      exhibitionism: 20,
+      eloquence: 65,
+      playfulness: 15,
+      curiosity: 45,
+    },
+    body: {
+      height: 72,
+      athleticism: 88,
+      curviness: 25,
+      clothing: 'White Nike athletic shorts and bare chest',
+    },
     definition: `Character Definition: Nikita Andrews
 Basic Information: Age: 19
 Appearance: Nikita possesses the kind of physical presence that immediately draws the eye, standing at an athletic 6'0" with a build defined by years of relentless soccer training. His frame is lean but deceptively solid; his shoulders are broad, his chest is compact, and his thighs are thick and powerful—built for explosive sprints down the pitch rather than aesthetic vanity. His skin is fair, carrying a light, healthy color from hours spent under the afternoon sun during practice. His face is structured around a strong, slightly angular jawline and a straight, prominent nose, giving him a classic, striking profile that can look intimidatingly stern when at rest. His hair is kept in a sharp, high-and-tight skin fade, the dark brown strands on top cropped close and neat, framing his forehead with military precision.

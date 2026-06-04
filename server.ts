@@ -4,9 +4,6 @@ import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import { generateSystemPrompt } from './server/prompt';
 import dotenv from 'dotenv';
-
-// Load environment variables from .env.local (as recommended in README) and fallback to .env
-dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 async function startServer() {
@@ -15,17 +12,19 @@ async function startServer() {
 
   app.use(express.json({ limit: '2mb' }));
 
-  let aiClient: GoogleGenAI | null = null;
-  
-  function getGenAIClient(): GoogleGenAI {
-    if (!aiClient) {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('GEMINI_API_KEY is missing. Please configure it in the secrets settings.');
-      }
-      aiClient = new GoogleGenAI({ apiKey });
+  function getGenAIClient(customKey?: string): GoogleGenAI {
+    const key = customKey || process.env.GEMINI_API_KEY;
+    if (!key) {
+      throw new Error('GEMINI_API_KEY is missing. Please configure it in your secrets setting, or supply your custom key.');
     }
-    return aiClient;
+    return new GoogleGenAI({ 
+      apiKey: key,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
 
   // Health endpoint
@@ -51,14 +50,15 @@ async function startServer() {
         return res.status(400).json({ error: 'messages must be a non-empty array' });
       }
 
-      const { messages, scenarioContext, provider = 'gemini', openRouterModel = 'deepseek/deepseek-chat', customApiKey } = req.body; 
+      const { messages, scenarioContext, provider = 'gemini', openRouterModel = 'deepseek/deepseek-chat', customApiKey, sessionStats, modelSettings } = req.body; 
       
       if (!['gemini', 'openrouter', 'mock'].includes(provider)) {
         return res.status(400).json({ error: 'provider must be one of gemini, openrouter, mock' });
       }
 
       if (provider === 'mock') {
-        const mockResponse = `This is a mock response from the UI test provider. The system is operating normally without using true API quota.
+        const mockResponse = `The simulation reacts to your stance. [STANCE: ${sessionStats?.stance || 'normal'}]
+Stamina: ${sessionStats?.stamina || 100}%. Willpower: ${sessionStats?.willpower || 100}%.
 
 Here is a typical narrative paragraph testing the UI rendering length. It usually contains actions and dialogue.
 
@@ -72,12 +72,7 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
       "affinity": 20,
       "tags": ["testing"]
     }
-  ],
-  "pornstarStats": {
-    "subscribers": 1500,
-    "tips": 250,
-    "socialMood": "Trending up"
-  }
+  ]
 }
 </STATE>
 
@@ -87,7 +82,6 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
 3. Attempt to interact with the mock character 'Jane'.
 4. Decline and exit the mock interaction.`;
         
-        // Add a slight delay to simulate network
         await new Promise(resolve => setTimeout(resolve, 800));
         return res.json({ text: mockResponse, model: 'mock-local-ui-tester' });
       }
@@ -97,6 +91,7 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
         scenarioContext.characters,
         scenarioContext.playerCharacterId,
         scenarioContext.gameMode,
+        sessionStats,
         scenarioContext.options
       );
 
@@ -127,7 +122,8 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
           body: JSON.stringify({
             model: openRouterModel,
             messages: formattedMessages,
-            temperature: 0.9,
+            temperature: modelSettings?.temperature ?? 0.9,
+            top_p: modelSettings?.topP ?? 1.0,
           })
         });
 
@@ -136,20 +132,25 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
           throw new Error(errorData?.error?.message || `OpenRouter API error (Status ${response.status})`);
         }
 
-        const completion = await response.json();
+        const textResponse = await response.text();
+        if (!textResponse || textResponse.trim() === '') {
+          throw new Error(`OpenRouter API returned an empty response (Status ${response.status})`);
+        }
+        
+        const completion = JSON.parse(textResponse);
         const text = completion.choices?.[0]?.message?.content || '';
         return res.json({ text, model: openRouterModel });
       }
 
-      const ai = getGenAIClient();
+      const ai = getGenAIClient(customApiKey);
       
       const formattedMessages = messages.map((m: any) => ({
         role: m.role,
         parts: [{ text: m.content }]
       }));
 
-      // Define model fallback chain
-      const modelChain = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+      // Define modern, authorized models fallback chain
+      const modelChain = ['gemini-3.5-flash', 'gemini-3.1-flash-lite'];
       let lastError: any = null;
 
       for (const modelName of modelChain) {
@@ -159,6 +160,8 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
             contents: formattedMessages,
             config: {
               systemInstruction: systemPrompt,
+              temperature: modelSettings?.temperature ?? 0.9,
+              topP: modelSettings?.topP ?? 1.0,
               safetySettings: [
                 { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
                 { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -186,7 +189,109 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
       throw lastError;
     } catch (err: any) {
       console.error('Chat error:', err);
-      res.status(500).json({ error: err.message || 'An error occurred during generation.' });
+      const isQuota = err.message?.includes('429') || err.message?.includes('RESOURCE_EXHAUSTED') || err.message?.includes('quota');
+      res.status(isQuota ? 429 : 500).json({ 
+        error: isQuota 
+          ? 'Gemini Quota Exceeded. The free-tier limit has been reached for this model. Use OpenRouter fallback or provide your own API key in Settings.' 
+          : (err.message || 'An error occurred during generation.') 
+      });
+    }
+  });
+
+  // API route to handle high-fidelity Gemini Text-to-Speech (TTS)
+  app.post('/api/tts', async (req, res) => {
+    try {
+      const { text, voice = 'Kore', customApiKey, provider = 'gemini' } = req.body;
+      if (!text) {
+        return res.status(400).json({ error: 'text is required' });
+      }
+
+      if (provider === 'mock') {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return res.json({ audio: '' });
+      }
+
+      const ai = getGenAIClient(customApiKey);
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-tts-preview",
+        contents: [{ parts: [{ text }] }],
+        config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: voice }, // 'Puck', 'Charon', 'Kore', 'Fenrir', 'Zephyr'
+            },
+          },
+        },
+      });
+
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (base64Audio) {
+        return res.json({ audio: base64Audio });
+      } else {
+        throw new Error('No audio content returned from Gemini');
+      }
+    } catch (err: any) {
+      console.error('TTS error:', err);
+      res.status(500).json({ error: err.message || 'Error occurred during speech synthesis' });
+    }
+  });
+
+  // API route to handle AI Avatar synthesis
+  app.post('/api/generate-avatar', async (req, res) => {
+    try {
+      const { prompt, customApiKey, provider = 'gemini' } = req.body;
+      if (!prompt) {
+        return res.status(400).json({ error: 'prompt is required' });
+      }
+
+      if (provider === 'mock') {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        // Return a stable colorful abstract seed image for mock mode
+        const hash = prompt.split('').reduce((acc: number, c: string) => acc + c.charCodeAt(0), 0);
+        const hue = (hash * 137.508) % 360;
+        return res.json({ imageUrl: `https://placehold.co/400x400/hsl(${hue},45%,15%)/hsl(${hue},100%,75%)?text=Eros+Vector+Cast` });
+      }
+
+      const ai = getGenAIClient(customApiKey);
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [{ text: `A high-fidelity, high-fantasy or modern cinematic adult gaming portrait avatar of: ${prompt}. Character focus, clear facial features, aesthetic lighting, high contrast.` }]
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: "1:1"
+          }
+        }
+      });
+
+      let base64Image = '';
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData?.data) {
+          base64Image = part.inlineData.data;
+          break;
+        }
+      }
+
+      if (base64Image) {
+        return res.json({ imageUrl: `data:image/png;base64,${base64Image}` });
+      } else {
+        // Fallback info text
+        throw new Error('Model did not return binary image data. Ensure your API key has access to image generation.');
+      }
+    } catch (err: any) {
+      console.error('Avatar generation error:', err);
+      
+      // Better reporting for quota issues
+      const errText = err.message || '';
+      if (errText.includes('429') || errText.includes('RESOURCE_EXHAUSTED') || errText.includes('quota')) {
+        return res.status(429).json({ 
+          error: 'Gemini Image Quota Exceeded. The free-tier limit has been reached. Please try again later or provide your own API key in Settings to continue synthing avatars immediately.' 
+        });
+      }
+
+      res.status(500).json({ error: err.message || 'Error occurred during avatar generation' });
     }
   });
 
