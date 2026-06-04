@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Sparkles, Loader2, Play, Users, Plus, X, Brain, Save, History, Settings, Trash2, HelpCircle, Sliders, Upload } from 'lucide-react';
+import { Send, Sparkles, Loader2, Play, Users, Plus, X, Brain, Save, History, Settings, Trash2, HelpCircle, Sliders, Upload, Camera, MessageSquare, Flame, Volume2, VolumeX, UserPlus, Info } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChatMessage, StoryState, CharacterDefinition, GameMode, CharacterState, SaveSlot } from './types';
 import { parseModelResponse } from './utils';
@@ -24,6 +24,13 @@ export default function App() {
   const [gameMode, setGameMode] = useState<GameMode>('standard');
   const [scenarioInput, setScenarioInput] = useState(defaultScenarios[0].fullSetup);
   const [selectedScenarioPresetId, setSelectedScenarioPresetId] = useState<string>(defaultScenarios[0].id);
+
+  // New Adjustable Options before Game Start
+  const [consequences, setConsequences] = useState<boolean>(true);
+  const [arousalSpeed, setArousalSpeed] = useState<'slow' | 'normal' | 'fast'>('normal');
+  const [narrativeTone, setNarrativeTone] = useState<'romantic' | 'smutty' | 'kinky' | 'story-driven'>('smutty');
+  const [complianceLevel, setComplianceLevel] = useState<'compliant' | 'normal' | 'resistant' | 'defiant'>('normal');
+  const [arousalDecay, setArousalDecay] = useState<boolean>(false);
   
   // API provider state
   const [provider, setProvider] = useState<'gemini' | 'openrouter'>('gemini');
@@ -48,14 +55,19 @@ export default function App() {
       { id: "deepseek/deepseek-chat", name: "DeepSeek V3 (Fast & Smart)" },
       { id: "gryphe/mythomax-l2-13b", name: "MythoMax L2 13B (Supreme Fiction & Roleplay)" },
       { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B (High Intelligence)" },
-      { id: "liquid/lfm-40b", name: "Liquid LFM 40B (Fluid Output)" },
-      { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash (Fallback Core)" }
+      { id: "google/gemini-pro-1.5", name: "Gemini 3.1 Pro (High Intelligence)" },
+      { id: "google/gemini-flash-1.5", name: "Gemini 3.5 Flash (High Speed)" },
+      { id: "google/gemini-flash-1.5-8b", name: "Gemini Flash Lite (Fallback)" }
     ];
   });
   const [customModelId, setCustomModelId] = useState('');
   const [customModelLabel, setCustomModelLabel] = useState('');
   const [fetchingModels, setFetchingModels] = useState(false);
   const [fetchSuccessMessage, setFetchSuccessMessage] = useState('');
+  const [currentChoiceIndex, setCurrentChoiceIndex] = useState(0);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [showDossierManager, setShowDossierManager] = useState(false);
+  const [lastUsedModel, setLastUsedModel] = useState<string | null>(null);
 
   // Import modal state
   const [showImport, setShowImport] = useState(false);
@@ -67,6 +79,7 @@ export default function App() {
   const [showCreator, setShowCreator] = useState(false);
   const [creatorName, setCreatorName] = useState('');
   const [creatorShort, setCreatorShort] = useState('');
+  const [creatorTags, setCreatorTags] = useState('');
   const [creatorSliders, setCreatorSliders] = useState({
     assertiveness: 50,
     sociability: 50,
@@ -150,7 +163,8 @@ export default function App() {
           activeCharacterIds: data.activeCharacterIds || [],
           provider: data.provider || 'gemini',
           openRouterModel: data.openRouterModel || '',
-          customApiKey: data.customApiKey || ''
+          customApiKey: data.customApiKey || '',
+          options: data.options || undefined
         });
       });
       // Sort by newest save
@@ -252,7 +266,14 @@ export default function App() {
       activeCharacterIds,
       provider,
       openRouterModel,
-      customApiKey
+      customApiKey,
+      options: {
+        consequences,
+        arousalSpeed,
+        narrativeTone,
+        complianceLevel,
+        arousalDecay
+      }
     };
     const updated = [newSlot, ...saveSlots];
     setSaveSlots(updated);
@@ -281,6 +302,13 @@ export default function App() {
     setProvider(slot.provider || 'gemini');
     setOpenRouterModel(slot.openRouterModel || 'deepseek/deepseek-chat');
     setCustomApiKey(slot.customApiKey || '');
+    if (slot.options) {
+      setConsequences(slot.options.consequences !== undefined ? slot.options.consequences : true);
+      setArousalSpeed(slot.options.arousalSpeed || 'normal');
+      setNarrativeTone(slot.options.narrativeTone || 'smutty');
+      setComplianceLevel(slot.options.complianceLevel || 'normal');
+      setArousalDecay(slot.options.arousalDecay || false);
+    }
     setStarted(true);
     setShowSaveLoadModal(false);
   };
@@ -373,44 +401,6 @@ export default function App() {
     );
   };
 
-  // Generates avatar during creator modal phase
-  const handleGenerateCreatorAvatar = async () => {
-    if (!creatorAvatarPrompt.trim()) {
-      setAvatarSynthError('Please type in a quick portrait prompt first');
-      return;
-    }
-    
-    setAvatarSynthing(true);
-    setAvatarSynthError('');
-    
-    try {
-      const resp = await fetch('/api/generate-avatar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: creatorAvatarPrompt.trim() })
-      });
-      
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || 'Syntax failure in Gemini synthesis API');
-      
-      setCreatorAvatarUrl(data.imageUrl);
-      setToastNotify({ message: 'Erotic portrait synthesized successfully!', isError: false });
-    } catch (err: any) {
-      console.error(err);
-      const isQuotaExceeded = err.message.includes('429') || err.message.includes('Quota exceeded');
-      setAvatarSynthError(isQuotaExceeded 
-        ? 'Rate limit reached. Please try again in a moment.' 
-        : `Failed to synthesize AI portrait: ${err.message}`);
-      setToastNotify({ 
-        message: isQuotaExceeded 
-          ? 'Rate limit reached. Please wait a minute.' 
-          : 'Offsite portraiting requires a paid API key.', 
-        isError: true 
-      });
-    } finally {
-      setAvatarSynthing(false);
-    }
-  };
 
   // Handles inline generation for any preset or custom character already on the selector grid
   const handleTriggerInlineSynthesizeAvatar = async (char: CharacterDefinition) => {
@@ -510,11 +500,15 @@ Behavioral Response Guidelines:
     const targetId = creatorName.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now().toString().slice(-4);
     const customDef = generateDefinitionFromSliders(creatorName.trim(), creatorShort.trim(), creatorSliders);
     
+    // Process tags
+    const tagsArray = creatorTags.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+
     const newChar: CharacterDefinition = {
       id: targetId,
       name: creatorName.trim(),
       shortDescription: creatorShort.trim() || "Custom Simulation Vector",
       definition: customDef,
+      tags: tagsArray,
       personality: {
         assertiveness: creatorSliders.assertiveness,
         sociability: creatorSliders.sociability,
@@ -536,6 +530,7 @@ Behavioral Response Guidelines:
     setShowCreator(false);
     setCreatorName('');
     setCreatorShort('');
+    setCreatorTags('');
     setCreatorStartingArousal(20);
     setCreatorAvatarUrl('');
     setCreatorAvatarPrompt('');
@@ -645,6 +640,22 @@ Behavioral Response Guidelines:
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  useEffect(() => {
+    if (voiceEnabled && messages.length > 0 && !loading) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg.role === 'model') {
+        const parsed = parseModelResponse(lastMsg.content);
+        if ('speechSynthesis' in window) {
+           window.speechSynthesis.cancel();
+           const textToRead = parsed.paragraphs.join(' ');
+           const utterance = new SpeechSynthesisUtterance(textToRead);
+           utterance.rate = 1.0;
+           window.speechSynthesis.speak(utterance);
+        }
+      }
+    }
+  }, [messages, voiceEnabled, loading]);
+
   const initiateGame = async () => {
     setStarted(true);
     setLoading(true);
@@ -661,10 +672,22 @@ Behavioral Response Guidelines:
     setMessages([kickoffMessage]);
     
     const context = {
-      characters: availableCharacters.filter(c => activeCharacterIds.includes(c.id)),
+      characters: availableCharacters
+        .filter(c => activeCharacterIds.includes(c.id))
+        .map(c => ({
+          ...c,
+          startingArousal: charStartingArousals[c.id] !== undefined ? charStartingArousals[c.id] : (c.startingArousal ?? 20)
+        })),
       playerCharacterId,
       gameMode,
-      scenarioDescription: scenarioInput
+      scenarioDescription: scenarioInput,
+      options: {
+        consequences,
+        arousalSpeed,
+        narrativeTone,
+        complianceLevel,
+        arousalDecay
+      }
     };
     
     try {
@@ -683,6 +706,8 @@ Behavioral Response Guidelines:
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to fetch');
       
+      if (data.model) setLastUsedModel(data.model);
+      
       setMessages(prev => [
         ...prev,
         { id: Date.now().toString(), role: 'model', content: data.text }
@@ -692,6 +717,19 @@ Behavioral Response Guidelines:
       setStarted(false); 
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSignIn = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user') {
+        console.log('User closed the popup.');
+      } else {
+        console.error('Sign-in error:', error);
+        setToastNotify({ message: 'Sign-in failed. Please try again.', isError: true });
+      }
     }
   };
 
@@ -710,10 +748,22 @@ Behavioral Response Guidelines:
     setError('');
     
     const context = {
-      characters: availableCharacters.filter(c => activeCharacterIds.includes(c.id)),
+      characters: availableCharacters
+        .filter(c => activeCharacterIds.includes(c.id))
+        .map(c => ({
+          ...c,
+          startingArousal: charStartingArousals[c.id] !== undefined ? charStartingArousals[c.id] : (c.startingArousal ?? 20)
+        })),
       playerCharacterId,
       gameMode,
-      scenarioDescription: scenarioInput // Keeps context intact if needed for regeneration or system prompt refresh
+      scenarioDescription: scenarioInput, // Keeps context intact if needed for regeneration or system prompt refresh
+      options: {
+        consequences,
+        arousalSpeed,
+        narrativeTone,
+        complianceLevel,
+        arousalDecay
+      }
     };
 
     try {
@@ -731,6 +781,8 @@ Behavioral Response Guidelines:
       
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to fetch');
+      
+      if (data.model) setLastUsedModel(data.model);
       
       setMessages(prev => [
         ...prev,
@@ -758,10 +810,22 @@ Behavioral Response Guidelines:
     setLoading(true);
     
     const context = {
-      characters: availableCharacters.filter(c => activeCharacterIds.includes(c.id)),
+      characters: availableCharacters
+        .filter(c => activeCharacterIds.includes(c.id))
+        .map(c => ({
+          ...c,
+          startingArousal: charStartingArousals[c.id] !== undefined ? charStartingArousals[c.id] : (c.startingArousal ?? 20)
+        })),
       playerCharacterId,
       gameMode,
-      scenarioDescription: scenarioInput
+      scenarioDescription: scenarioInput,
+      options: {
+        consequences,
+        arousalSpeed,
+        narrativeTone,
+        complianceLevel,
+        arousalDecay
+      }
     };
 
     try {
@@ -779,6 +843,8 @@ Behavioral Response Guidelines:
       
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to fetch');
+      
+      if (data.model) setLastUsedModel(data.model);
       
       setMessages(prev => [
         ...prev,
@@ -840,7 +906,7 @@ Behavioral Response Guidelines:
                 ) : (
                   <button
                     type="button"
-                    onClick={() => signInWithPopup(auth, googleProvider)}
+                    onClick={handleSignIn}
                     className="px-2.5 py-1.5 bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-900 rounded-lg text-zinc-400 hover:text-red-400 transition-colors flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider font-mono shadow-sm cursor-pointer"
                     title="Sign in with Google to enable cloud backups"
                   >
@@ -916,40 +982,197 @@ Behavioral Response Guidelines:
               />
             </div>
 
-            {/* Game Mode */}
-            <div className="space-y-2">
+            {/* Game Mode Selection */}
+            <div className="space-y-3">
               <label className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 font-mono">Framework Execution Mode</label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <button
                   type="button"
                   onClick={() => setGameMode('standard')}
-                  className={`p-3 rounded-xl border text-left flex flex-col items-start gap-0.5 transition-colors relative ${
+                  className={`p-3 rounded-xl border text-left flex flex-col items-start gap-1 transition-colors relative h-full ${
                     gameMode === 'standard' 
-                      ? 'bg-zinc-900/90 border-red-550 text-white shadow-sm' 
-                      : 'bg-zinc-950/40 border-zinc-900 text-zinc-500 hover:border-zinc-800 hover:text-zinc-300'
+                      ? 'bg-zinc-900/90 border-red-550 text-white shadow-sm shadow-red-950/20' 
+                      : 'bg-zinc-950/40 border-zinc-900 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200'
                   }`}
                 >
                   <span className="font-display font-bold text-xs flex items-center gap-1.5">
                     <Send className={`w-3.5 h-3.5 ${gameMode === 'standard' ? 'text-red-500' : 'text-zinc-500'}`}/> 
                     Standard Sandbox
                   </span>
-                  <span className="text-[10px] text-zinc-500 leading-normal">NPC cast events await your explicit action triggers.</span>
+                  <span className="text-[9px] text-zinc-500 leading-normal">NPC actions await your triggers. Fully controlled sandbox.</span>
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setGameMode('free_will')}
-                  className={`p-3 rounded-xl border text-left flex flex-col items-start gap-0.5 transition-colors relative ${
+                  className={`p-3 rounded-xl border text-left flex flex-col items-start gap-1 transition-colors relative h-full ${
                     gameMode === 'free_will' 
-                      ? 'bg-zinc-900/90 border-red-550 text-white shadow-sm' 
-                      : 'bg-zinc-950/40 border-zinc-900 text-zinc-500 hover:border-zinc-800 hover:text-zinc-300'
+                      ? 'bg-zinc-900/90 border-red-550 text-white shadow-sm shadow-red-950/20' 
+                      : 'bg-zinc-950/40 border-zinc-900 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200'
                   }`}
                 >
                   <span className="font-display font-bold text-xs flex items-center gap-1.5">
                     <Brain className={`w-3.5 h-3.5 ${gameMode === 'free_will' ? 'text-red-500' : 'text-zinc-500'}`}/> 
                     Free Will Mode
                   </span>
-                  <span className="text-[10px] text-zinc-500 leading-normal">NPC entities proactively drive relationship outcomes.</span>
+                  <span className="text-[9px] text-zinc-500 leading-normal">NPC nodes proactively drive relationship arcs autonomously.</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setGameMode('pornstar')}
+                  className={`p-3 rounded-xl border text-left flex flex-col items-start gap-1 transition-colors relative h-full ${
+                    gameMode === 'pornstar' 
+                      ? 'bg-zinc-900/90 border-red-550 text-white shadow-sm shadow-red-950/20' 
+                      : 'bg-zinc-950/40 border-zinc-900 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200'
+                  }`}
+                >
+                  <span className="font-display font-bold text-xs flex items-center gap-1.5">
+                    <Camera className={`w-3.5 h-3.5 ${gameMode === 'pornstar' ? 'text-red-500' : 'text-zinc-500'}`}/> 
+                    Pornstar Simulator
+                  </span>
+                  <span className="text-[9px] text-zinc-500 leading-normal">Build brand, fulfill fan direct message requests, buy custom sexy shoots.</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setGameMode('sexting')}
+                  className={`p-3 rounded-xl border text-left flex flex-col items-start gap-1 transition-colors relative h-full ${
+                    gameMode === 'sexting' 
+                      ? 'bg-zinc-900/90 border-red-550 text-white shadow-sm shadow-red-950/20' 
+                      : 'bg-zinc-950/40 border-zinc-900 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200'
+                  }`}
+                >
+                  <span className="font-display font-bold text-xs flex items-center gap-1.5">
+                    <MessageSquare className={`w-3.5 h-3.5 ${gameMode === 'sexting' ? 'text-red-500' : 'text-zinc-500'}`}/> 
+                    Sexting Simulator
+                  </span>
+                  <span className="text-[9px] text-zinc-500 leading-normal">Native phone texting layout. Snappy typing, emotes, raw selfies described.</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setGameMode('hookup')}
+                  className={`p-3 rounded-xl border text-left flex flex-col items-start gap-1 transition-colors relative h-full col-span-1 sm:col-span-2 lg:col-span-1 ${
+                    gameMode === 'hookup' 
+                      ? 'bg-zinc-900/90 border-red-550 text-white shadow-sm shadow-red-950/20' 
+                      : 'bg-zinc-950/40 border-zinc-900 text-zinc-400 hover:border-zinc-800 hover:text-zinc-200'
+                  }`}
+                >
+                  <span className="font-display font-bold text-xs flex items-center gap-1.5">
+                    <Flame className={`w-3.5 h-3.5 ${gameMode === 'hookup' ? 'text-red-500' : 'text-zinc-500'}`}/> 
+                    Hookup Simulator
+                  </span>
+                  <span className="text-[9px] text-zinc-500 leading-normal">Immediate direct date meetups. Instant physical contacts, primal speed.</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Adjustable Options */}
+            <div className="space-y-4 bg-zinc-950/40 p-4 rounded-xl border border-zinc-900">
+              <div className="flex items-center justify-between border-b border-zinc-900 pb-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-zinc-300 font-mono flex items-center gap-1.5">
+                  <Sliders className="w-3.5 h-3.5 text-red-500" /> Pre-Game Adjustable Options
+                </span>
+                <span className="text-[10px] text-zinc-500 font-mono">Configure Rulesets</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Select: Compliance Level */}
+                <div className="space-y-1.5 bg-zinc-900/20 p-3 rounded-lg border border-zinc-900/80">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Difficulty / Compliance</label>
+                  <select
+                    value={complianceLevel}
+                    onChange={(e) => setComplianceLevel(e.target.value as any)}
+                    className="w-full bg-zinc-950 border border-zinc-850 p-1.5 text-zinc-300 rounded text-xs outline-none focus:border-red-900"
+                  >
+                    <option value="compliant">🧸 Easy (Compliant & Eager)</option>
+                    <option value="normal">⚖️ Normal (Baseline Personality)</option>
+                    <option value="resistant">🛑 Hard (Resistant & Skeptical)</option>
+                    <option value="defiant">🔥 Extreme (Defiant & Unforgiving)</option>
+                  </select>
+                  <p className="text-[9px] text-zinc-500 leading-tight">Adjusts how easy characters are to seduce or manipulate.</p>
+                </div>
+
+                {/* Select: Arousal Speed */}
+                <div className="space-y-1.5 bg-zinc-900/20 p-3 rounded-lg border border-zinc-900/80">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Arousal Pacing Rate</label>
+                  <select
+                    value={arousalSpeed}
+                    onChange={(e) => setArousalSpeed(e.target.value as any)}
+                    className="w-full bg-zinc-950 border border-zinc-850 p-1.5 text-zinc-300 rounded text-xs outline-none focus:border-red-900"
+                  >
+                    <option value="slow">🐢 Slow & Sensual (Under +3% / choice)</option>
+                    <option value="normal">⚖️ Balanced (Under +7% / choice)</option>
+                    <option value="fast">🔥 High Intensity (Up to +15% / choice)</option>
+                  </select>
+                  <p className="text-[9px] text-zinc-500 leading-tight">Controls the rate at which physical sexual tension builds with actions.</p>
+                </div>
+
+                {/* Checkbox: Consequences */}
+                <div className="space-y-1.5 bg-zinc-900/20 p-3 rounded-lg border border-zinc-900/80 flex items-start gap-3">
+                  <input
+                    id="consequences_cb"
+                    type="checkbox"
+                    checked={consequences}
+                    onChange={(e) => setConsequences(e.target.checked)}
+                    className="mt-1 accent-red-650 rounded cursor-pointer w-4 h-4 shrink-0 bg-zinc-900 border border-zinc-800"
+                  />
+                  <div className="space-y-0.5">
+                    <label htmlFor="consequences_cb" className="text-xs font-bold text-zinc-300 cursor-pointer flex items-center gap-1 select-none">
+                      Actions Have Consequences
+                    </label>
+                    <p className="text-[9px] text-zinc-500 leading-normal">
+                      When active, choices can lead NPC characters to walk out of simulations.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Checkbox: Arousal Decay */}
+                <div className="space-y-1.5 bg-zinc-900/20 p-3 rounded-lg border border-zinc-900/80 flex items-start gap-3">
+                  <input
+                    id="arousalDecay_cb"
+                    type="checkbox"
+                    checked={arousalDecay}
+                    onChange={(e) => setArousalDecay(e.target.checked)}
+                    className="mt-1 accent-red-650 rounded cursor-pointer w-4 h-4 shrink-0 bg-zinc-900 border border-zinc-800"
+                  />
+                  <div className="space-y-0.5">
+                    <label htmlFor="arousalDecay_cb" className="text-xs font-bold text-zinc-300 cursor-pointer flex items-center gap-1 select-none">
+                      Arousal Decay
+                    </label>
+                    <p className="text-[9px] text-zinc-500 leading-normal">
+                      If neglected or given boring prompts, a character's arousal will rapidly drop.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Select: Narrative Tone */}
+                <div className="space-y-1.5 md:col-span-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">Atmospheric Tone Focus</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: 'smutty', label: '🔥 Pure Smut', desc: 'Direct explicit details' },
+                      { id: 'romantic', label: '✨ Romantic Build', desc: 'Sensual glances & hearts' },
+                      { id: 'kinky', label: '⛓️ Kink & Dom/Sub', desc: 'Bondage, orders & play' },
+                      { id: 'story-driven', label: '📖 Story-First', desc: 'Dialogue and motive plots' },
+                    ].map(t => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setNarrativeTone(t.id as any)}
+                        className={`p-2 rounded border text-left flex flex-col items-start transition-all ${
+                          narrativeTone === t.id
+                            ? 'bg-zinc-900 border-red-500 text-zinc-200'
+                            : 'bg-zinc-950/20 border-zinc-900 text-zinc-500 hover:border-zinc-800 hover:text-zinc-300'
+                        }`}
+                      >
+                        <span className="font-bold text-[10px] leading-tight block">{t.label}</span>
+                        <span className="text-[9px] text-zinc-500 leading-tight mt-0.5">{t.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1065,12 +1288,19 @@ Behavioral Response Guidelines:
                           </div>
 
                           <div className="flex flex-col min-w-0 flex-1">
-                            <span className={`font-display font-bold text-xs truncate ${isActive ? 'text-zinc-150 font-semibold' : 'text-zinc-550'}`}>
+                            <span className={`font-display font-bold text-xs ${isActive ? 'text-zinc-150 font-semibold' : 'text-zinc-550'}`}>
                               {char.name}
                             </span>
-                            <span className="text-[8px] text-zinc-500 font-mono tracking-wider font-semibold uppercase leading-none mt-0.5">
-                              {defaultCharacters.some(dc => dc.id === char.id) ? 'PRESET ARCHETYPE' : 'CUSTOM AVATAR'}
-                            </span>
+                            <div className="flex flex-wrap gap-1 mt-0.5">
+                              <span className="text-[7px] text-zinc-500 font-mono tracking-wider font-semibold uppercase px-1 bg-zinc-950/40 rounded border border-zinc-900/50">
+                                {defaultCharacters.some(dc => dc.id === char.id) ? 'PRESET' : 'CUSTOM'}
+                              </span>
+                              {char.tags && char.tags.map((tag, tIdx) => (
+                                <span key={tIdx} className="text-[7px] text-red-500/60 font-mono tracking-wider font-semibold uppercase px-1 bg-red-950/5 rounded border border-red-900/10">
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
                           </div>
                         </div>
                         
@@ -1246,6 +1476,14 @@ Behavioral Response Guidelines:
                        value={creatorShort} onChange={e => setCreatorShort(e.target.value)}
                      />
                    </div>
+                   <div className="space-y-1">
+                     <input 
+                       type="text" 
+                       placeholder="Character Tags (comma separated, e.g. blonde, petite, tease)" 
+                       className="w-full bg-zinc-950 border border-zinc-900 p-2.5 rounded-lg text-zinc-200 outline-none focus:border-red-900 text-[10px] font-mono"
+                       value={creatorTags} onChange={e => setCreatorTags(e.target.value)}
+                     />
+                   </div>
 
                    {/* SLIDERS GRID */}
                    <div className="space-y-3 pt-2">
@@ -1392,32 +1630,16 @@ Behavioral Response Guidelines:
                           )}
                           
                           <div className="flex-1 min-w-0 space-y-1">
-                            <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-wider font-bold leading-none">AI Visual Synthing</div>
+                            <div className="text-[9px] text-zinc-400 font-mono uppercase tracking-wider font-bold leading-none">Avatar Image URL</div>
                             <input
                               type="text"
-                              value={creatorAvatarPrompt}
-                              onChange={(e) => setCreatorAvatarPrompt(e.target.value)}
-                              placeholder="e.g., gorgeous blond fitness model portrait"
+                              value={creatorAvatarUrl}
+                              onChange={(e) => setCreatorAvatarUrl(e.target.value)}
+                              placeholder="e.g., https://example.com/image.png"
                               className="w-full bg-zinc-950 border border-zinc-850 px-2 py-1.5 text-zinc-200 text-xs rounded-lg outline-none focus:border-red-900 placeholder:text-zinc-700 font-sans"
                             />
                           </div>
                         </div>
-                        
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={handleGenerateCreatorAvatar}
-                            disabled={avatarSynthing}
-                            className="flex-1 py-1.5 px-3 bg-red-950/60 hover:bg-red-900/40 border border-red-900/40 text-red-400 disabled:opacity-40 transition-colors rounded-lg text-[10px] uppercase font-mono font-bold tracking-wider flex items-center justify-center gap-1.5 cursor-pointer hover:scale-[1.01] active:scale-[0.99]"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 text-red-500 animate-spin" />
-                            {avatarSynthing ? 'Synthesizing...' : 'Gen Portrait with AI'}
-                          </button>
-                        </div>
-                        
-                        {avatarSynthError && (
-                          <div className="text-[10px] text-red-400 font-mono leading-relaxed pt-1 border-t border-zinc-900">{avatarSynthError}</div>
-                        )}
                       </div>
                      
                      <div className="space-y-1 bg-zinc-950/40 border border-zinc-855 p-2.5 rounded-lg">
@@ -1488,7 +1710,7 @@ Behavioral Response Guidelines:
                   </button>
                 ) : (
                   <button
-                    onClick={() => signInWithPopup(auth, googleProvider)}
+                    onClick={handleSignIn}
                     className="px-3 py-1.5 bg-red-650/15 hover:bg-red-600/20 border border-red-900/50 hover:border-red-500 text-red-400 hover:text-red-300 rounded-lg text-xs font-mono font-bold uppercase transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
@@ -1546,7 +1768,12 @@ Behavioral Response Guidelines:
                             <span>•</span>
                             <span className="capitalize">{slot.provider || 'gemini'}</span>
                             <span>•</span>
-                            <span className="lowercase">{slot.gameMode === 'free_will' ? 'free will' : 'standard'}</span>
+                            <span className="lowercase">
+                              {slot.gameMode === 'free_will' ? 'free will' : 
+                               slot.gameMode === 'pornstar' ? 'pornstar sim' :
+                               slot.gameMode === 'sexting' ? 'sexting sim' :
+                               slot.gameMode === 'hookup' ? 'hookup sim' : 'standard'}
+                            </span>
                           </div>
                         </div>
 
@@ -1749,7 +1976,7 @@ Behavioral Response Guidelines:
           ) : (
             <button
               type="button"
-              onClick={() => signInWithPopup(auth, googleProvider)}
+              onClick={handleSignIn}
               className="p-1.5 md:px-3 md:py-1.5 bg-zinc-950 border border-zinc-900 hover:border-zinc-805 rounded-lg text-zinc-400 hover:text-red-400 transition-colors flex items-center gap-1.5 text-[9px] md:text-[10px] font-bold uppercase tracking-wider font-mono shadow-sm cursor-pointer"
               title="Sign in with Google to enable cloud backups"
             >
@@ -1766,6 +1993,16 @@ Behavioral Response Guidelines:
           >
             <History className="w-3.5 h-3.5 text-red-500" />
             <span className="hidden md:inline font-mono">Checkpoints</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setVoiceEnabled(!voiceEnabled)}
+            className={`p-1.5 md:px-3 md:py-1.5 border hover:border-zinc-805 rounded-lg transition-colors flex items-center gap-1.5 text-[9px] md:text-[10px] font-bold uppercase tracking-wider shadow-sm ${voiceEnabled ? 'bg-red-950/20 border-red-900/50 text-red-400' : 'bg-zinc-950 border-zinc-900 text-zinc-400 hover:text-zinc-200'}`}
+            title="Toggle Character Voice (TTS)"
+          >
+            {voiceEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            <span className="hidden md:inline font-mono">Voice</span>
           </button>
           
           <button
@@ -1831,6 +2068,20 @@ Behavioral Response Guidelines:
             <div className="space-y-4 flex-1 pr-1 font-serif text-[14px] md:text-[15px] leading-relaxed text-zinc-305">
               {messages.map((msg) => {
                 if (msg.role === 'user' && !msg.isInitial) {
+                  if (gameMode === 'sexting') {
+                    return (
+                      <motion.div 
+                        key={msg.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex justify-end pr-2 my-2"
+                      >
+                        <div className="bg-blue-600 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-xs font-sans shadow-sm max-w-[75%] leading-relaxed">
+                          {msg.content}
+                        </div>
+                      </motion.div>
+                    );
+                  }
                   return (
                     <motion.div 
                       key={msg.id}
@@ -1847,6 +2098,23 @@ Behavioral Response Guidelines:
                 
                 if (msg.role === 'model') {
                   const parsed = parseModelResponse(msg.content);
+                  if (gameMode === 'sexting') {
+                    return (
+                      <motion.div 
+                        key={msg.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.3 }}
+                        className="space-y-2 flex flex-col items-start pl-2 my-2"
+                      >
+                        {parsed.paragraphs.map((p, i) => (
+                          <div key={i} className="bg-zinc-800 text-zinc-100 px-3.5 py-2 rounded-2xl rounded-tl-sm text-xs md:text-sm font-sans shadow-sm max-w-[85%] leading-relaxed">
+                            {p}
+                          </div>
+                        ))}
+                      </motion.div>
+                    );
+                  }
                   return (
                     <motion.div 
                       key={msg.id}
@@ -1914,29 +2182,42 @@ Behavioral Response Guidelines:
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="grid grid-cols-1 sm:grid-cols-3 gap-2 shrink-0 pr-1"
+              className="flex items-center gap-2 shrink-0 pr-1"
             >
-              {parsedRecent.options.map((opt, i) => {
-                const colors = [
-                  "text-red-500",
-                  "text-red-400",
-                  "text-red-300"
-                ];
-                const labelColor = colors[i % colors.length];
+              <button
+                type="button"
+                className="w-10 h-10 flex shrink-0 items-center justify-center bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900 hover:border-zinc-800 transition-colors"
+                onClick={() => setCurrentChoiceIndex((i) => (i - 1 + parsedRecent.options.length) % parsedRecent.options.length)}
+              >
+                ◀
+              </button>
 
-                return (
-                  <button
-                    key={opt.id}
-                    onClick={() => handleChoice(opt.text)}
-                    className="bg-zinc-950 border border-zinc-900 hover:bg-zinc-900/60 hover:border-zinc-850 p-2 text-left transition-all duration-200 flex flex-col gap-0.5 active:translate-y-[1px] group min-h-[44px] justify-center"
+              <div className="flex-1 overflow-hidden">
+                <AnimatePresence mode="wait">
+                  <motion.button
+                    key={currentChoiceIndex % parsedRecent.options.length}
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.15 }}
+                    onClick={() => handleChoice(parsedRecent.options[currentChoiceIndex % parsedRecent.options.length].text)}
+                    className="w-full bg-zinc-950 border border-zinc-900 hover:bg-zinc-900/60 hover:border-zinc-850 p-2.5 text-left transition-all duration-200 flex flex-col gap-1 active:translate-y-[1px] group min-h-[48px] justify-center rounded-lg"
                   >
-                    <span className={`block text-[8px] font-mono font-extrabold uppercase tracking-wider ${labelColor} group-hover:text-red-400`}>
-                      [PATH {opt.num}]
+                    <span className="block text-[8px] font-mono font-extrabold uppercase tracking-wider text-red-500 group-hover:text-red-400">
+                      [PATH {parsedRecent.options[currentChoiceIndex % parsedRecent.options.length].num}] ({Math.abs(currentChoiceIndex % parsedRecent.options.length) + 1} OF {parsedRecent.options.length})
                     </span>
-                    <p className="text-[11px] text-zinc-400 leading-tight font-sans line-clamp-2">{opt.text}</p>
-                  </button>
-                );
-              })}
+                    <p className="text-[12px] text-zinc-300 leading-snug font-sans text-wrap whitespace-normal line-clamp-4">{parsedRecent.options[currentChoiceIndex % parsedRecent.options.length].text}</p>
+                  </motion.button>
+                </AnimatePresence>
+              </div>
+
+              <button
+                type="button"
+                className="w-10 h-10 flex shrink-0 items-center justify-center bg-zinc-950 border border-zinc-900 rounded-lg text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900 hover:border-zinc-800 transition-colors"
+                onClick={() => setCurrentChoiceIndex((i) => (i + 1) % parsedRecent.options.length)}
+              >
+                ▶
+              </button>
             </motion.div>
           )}
 
@@ -1969,7 +2250,16 @@ Behavioral Response Guidelines:
           <div className="bg-zinc-950/70 border border-zinc-900 rounded-2xl p-4 flex-1 flex flex-col gap-3 overflow-y-auto scrollbar-thin">
             <h2 className="text-xs font-display font-bold uppercase tracking-widest text-zinc-500 font-mono pb-2 border-b border-zinc-900 flex justify-between items-center">
               <span>Dossier Telemetry</span>
-              <span className="text-[9px] px-1.5 py-0.5 bg-red-950/50 border border-red-900/30 text-red-400 font-bold uppercase rounded font-mono animate-pulse">LOCKED STATUS</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDossierManager(true)}
+                  className="px-2 py-1 bg-red-950/30 border border-red-900/40 text-red-500 hover:text-red-400 hover:bg-red-900/20 text-[8px] rounded transition-all font-bold uppercase tracking-wider"
+                >
+                  Manage Cast
+                </button>
+                <span className="text-[9px] px-1.5 py-0.5 bg-red-950/50 border border-red-900/30 text-red-400 font-bold uppercase rounded font-mono animate-pulse">LIVE</span>
+              </div>
             </h2>
             
             <div className="space-y-3.5 flex-1 overflow-y-auto pr-0.5">
@@ -1997,17 +2287,57 @@ Behavioral Response Guidelines:
                       </span>
                     </div>
                     
-                    <div className="h-1 bg-zinc-950 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.min(100, Math.max(0, charState.arousal))}%` }}
-                        transition={{ duration: 0.8 }}
-                        className="h-full bg-red-650 rounded-full shadow-[0_0_8px_rgba(220,38,38,0.5)]"
-                      ></motion.div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-[8px] text-zinc-500 font-mono uppercase">
+                        <span>Arousal</span>
+                        <span>{charState.arousal ?? 0}%</span>
+                      </div>
+                      <div className="h-1 bg-zinc-950 rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(100, Math.max(0, charState.arousal ?? 0))}%` }}
+                          transition={{ duration: 0.8 }}
+                          className="h-full bg-red-650 rounded-full shadow-[0_0_8px_rgba(220,38,38,0.5)]"
+                        ></motion.div>
+                      </div>
                     </div>
 
+                    {(consequences || charState.trust !== undefined) && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[8px] text-zinc-500 font-mono uppercase">
+                          <span>Trust</span>
+                          <span>{charState.trust ?? 50}%</span>
+                        </div>
+                        <div className="h-1 bg-zinc-950 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(100, Math.max(0, charState.trust ?? 50))}%` }}
+                            transition={{ duration: 0.8 }}
+                            className="h-full bg-blue-500 rounded-full"
+                          ></motion.div>
+                        </div>
+                      </div>
+                    )}
+
+                    {(consequences || charState.affinity !== undefined) && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[8px] text-zinc-500 font-mono uppercase">
+                          <span>Affinity</span>
+                          <span>{charState.affinity ?? 0}%</span>
+                        </div>
+                        <div className="h-1 bg-zinc-950 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(100, Math.max(0, charState.affinity ?? 0))}%` }}
+                            transition={{ duration: 0.8 }}
+                            className="h-full bg-purple-500 rounded-full"
+                          ></motion.div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap gap-1.5 pt-0.5">
-                      {charState.tags.map((tag, tIdx) => (
+                      {charState.tags && charState.tags.map((tag, tIdx) => (
                         <span key={tIdx} className="px-1.5 py-0.5 bg-zinc-950 border border-zinc-900/50 text-[8px] rounded font-mono font-medium text-zinc-500 uppercase tracking-tight">
                           {tag}
                         </span>
@@ -2035,6 +2365,43 @@ Behavioral Response Guidelines:
                   </div>
                 </div>
               ))}
+
+              {/* Pornstar Stats Ledger */}
+              {gameMode === 'pornstar' && (
+                <div className="mt-4 bg-zinc-900/60 border border-pink-900/30 p-3 rounded-xl space-y-3 relative overflow-hidden group">
+                  {/* Subtle dynamic background glow */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 to-purple-500/5 z-0" />
+                  
+                  <div className="relative z-10 space-y-2.5">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-pink-400 font-mono border-b border-pink-950 pb-1.5">
+                      <span>Brand Analytics</span>
+                      <span className="animate-pulse">● LIVE</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-zinc-950/80 p-2 rounded-lg border border-zinc-900">
+                        <span className="block text-[8px] text-zinc-500 font-mono uppercase mb-0.5">Subscribers</span>
+                        <span className="block text-sm font-display font-bold text-white tracking-widest">
+                          {parsedRecent?.pornstarStats?.subscribers?.toLocaleString() ?? 0}
+                        </span>
+                      </div>
+                      <div className="bg-zinc-950/80 p-2 rounded-lg border border-zinc-900">
+                        <span className="block text-[8px] text-zinc-500 font-mono uppercase mb-0.5">Total Tips</span>
+                        <span className="block text-sm font-display font-bold text-emerald-400 tracking-widest">
+                          ${parsedRecent?.pornstarStats?.tips?.toLocaleString() ?? 0}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-zinc-950/80 p-2 rounded-lg border border-zinc-900 flex items-center justify-between">
+                      <span className="text-[8px] text-zinc-500 font-mono uppercase">Social Feed Status</span>
+                      <span className="text-[9px] font-bold text-pink-300 tracking-wide">
+                        {parsedRecent?.pornstarStats?.socialMood ?? "Awaiting Data"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -2042,9 +2409,21 @@ Behavioral Response Guidelines:
 
       {/* Footer Bar */}
       <footer className="flex justify-between items-center text-[10px] sm:text-xs text-zinc-600 uppercase tracking-widest font-bold shrink-0">
-        <div>Engine Build: 1.0.5-EROS</div>
+        <div className="flex items-center gap-4">
+          <span>Engine Build: 1.0.5-EROS</span>
+          {lastUsedModel && (
+            <span className="text-zinc-700 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-900 border-dashed animate-pulse lowercase font-mono">
+              Vector: {lastUsedModel}
+            </span>
+          )}
+        </div>
         <div className="flex gap-4 sm:gap-6">
-          <span className="hidden sm:inline-block">Mode: {gameMode === 'free_will' ? 'Free Will' : 'Standard'}</span>
+          <span className="hidden sm:inline-block">Mode: {
+            gameMode === 'free_will' ? 'Free Will' : 
+            gameMode === 'pornstar' ? 'Pornstar Sim' :
+            gameMode === 'sexting' ? 'Sexting Sim' :
+            gameMode === 'hookup' ? 'Hookup Sim' : 'Standard'
+          }</span>
           <span className="hidden sm:inline-block">Visuals: Explicit Narrative</span>
           <span>Status: ACTIVE</span>
         </div>
@@ -2085,7 +2464,7 @@ Behavioral Response Guidelines:
                 </button>
               ) : (
                 <button
-                  onClick={() => signInWithPopup(auth, googleProvider)}
+                  onClick={handleSignIn}
                   className="px-3 py-1.5 bg-red-650/15 hover:bg-red-600/20 border border-red-900/50 hover:border-red-500 text-red-400 hover:text-red-300 rounded-lg text-xs font-mono font-bold uppercase transition-all shrink-0 flex items-center gap-1.5 cursor-pointer"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
@@ -2143,7 +2522,12 @@ Behavioral Response Guidelines:
                           <span>•</span>
                           <span className="capitalize">{slot.provider || 'gemini'}</span>
                           <span>•</span>
-                          <span className="lowercase">{slot.gameMode === 'free_will' ? 'free will' : 'standard'}</span>
+                          <span className="lowercase">
+                            {slot.gameMode === 'free_will' ? 'free will' : 
+                             slot.gameMode === 'pornstar' ? 'pornstar sim' :
+                             slot.gameMode === 'sexting' ? 'sexting sim' :
+                             slot.gameMode === 'hookup' ? 'hookup sim' : 'standard'}
+                          </span>
                         </div>
                       </div>
 
@@ -2167,6 +2551,87 @@ Behavioral Response Guidelines:
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Character Dossier Manager Modal - For adding/removing characters mid-session */}
+      {showDossierManager && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-zinc-900 p-6 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col gap-5 relative shadow-2xl text-left">
+             <div className="flex justify-between items-center pb-3 border-b border-zinc-900">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-red-500" />
+                  <h3 className="font-bold uppercase tracking-wider text-sm text-zinc-100 font-mono">Simulated Cast Controller</h3>
+                </div>
+                <button onClick={() => setShowDossierManager(false)} className="text-zinc-500 hover:text-zinc-300 transition-colors"><X className="w-5 h-5"/></button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-5 pr-1 scrollbar-thin">
+                <div className="bg-red-950/10 border border-red-900/30 p-3 rounded-xl flex gap-3">
+                  <Info className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-zinc-400 font-mono leading-relaxed uppercase">
+                    Vectors modified here will influence the next generation cycle. Injecting new character nodes mid-simulation allows for unexpected narrative shifts.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {availableCharacters.map(char => {
+                    const isActive = activeCharacterIds.includes(char.id);
+                    return (
+                      <div 
+                        key={char.id} 
+                        onClick={() => {
+                          if (isActive && activeCharacterIds.length <= 1) {
+                            setToastNotify({ message: "At least one character node must remain active.", isError: true });
+                            return;
+                          }
+                          setActiveCharacterIds(prev => {
+                            if (isActive) {
+                              return prev.filter(id => id !== char.id);
+                            } else {
+                              // Sync starting arousal when adding via dossier manager
+                              if (charStartingArousals[char.id] === undefined) {
+                                setCharStartingArousals(s => ({ ...s, [char.id]: char.startingArousal ?? 20 }));
+                              }
+                              return [...prev, char.id];
+                            }
+                          });
+                        }}
+                        className={`p-3 rounded-2xl border transition-all duration-300 cursor-pointer flex items-center gap-3 relative overflow-hidden group ${
+                          isActive 
+                            ? 'bg-zinc-900/60 border-red-900/60 shadow-[0_0_20px_rgba(153,27,27,0.15)] ring-1 ring-red-900/20' 
+                            : 'bg-zinc-950/40 border-zinc-900 hover:border-zinc-700 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="relative">
+                          {renderCharacterAvatarIcon(char, "w-11 h-11")}
+                          {isActive && (
+                            <div className="absolute -top-1 -right-1 bg-red-600 w-3 h-3 rounded-full border-2 border-zinc-950 shadow-[0_0_8px_rgba(220,38,38,0.8)] animate-pulse" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-xs font-bold uppercase block truncate ${isActive ? 'text-red-400' : 'text-zinc-400'}`}>
+                            {char.name}
+                          </span>
+                          <span className="text-[8px] text-zinc-655 font-mono uppercase tracking-tighter truncate block mt-0.5">
+                            {char.shortDescription}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button 
+                  onClick={() => setShowDossierManager(false)}
+                  className="w-full bg-red-650 hover:bg-red-700 text-white font-bold p-3.5 rounded-2xl transition-all shadow-lg shadow-red-950/20 uppercase font-mono tracking-[0.2em] text-[10px] active:scale-[0.98]"
+                >
+                  Synchronize Cast Changes
+                </button>
+              </div>
           </div>
         </div>
       )}
@@ -2229,12 +2694,27 @@ Behavioral Response Guidelines:
                       value={openRouterModel}
                       onChange={(e) => setOpenRouterModel(e.target.value)}
                     >
-                      <option value="deepseek/deepseek-chat">DeepSeek V3 (Fast & Smart)</option>
-                      <option value="gryphe/mythomax-l2-13b">MythoMax L2 13B (Supreme Fiction & Roleplay)</option>
-                      <option value="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B (High Intelligence)</option>
-                      <option value="liquid/lfm-40b">Liquid LFM 40B (Fluid Output)</option>
-                      <option value="google/gemini-2.5-flash">Gemini 2.5 Flash (Fallback Core)</option>
+                      {orModels.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
                     </select>
+
+                    <div className="pt-1.5">
+                      <button
+                        type="button"
+                        onClick={handleFetchOpenRouterModels}
+                        disabled={fetchingModels}
+                        className="w-full py-1.5 px-3 bg-red-950/40 hover:bg-red-900/40 border border-red-900/30 text-red-400 rounded text-[10px] font-mono tracking-wider font-bold uppercase transition-colors disabled:opacity-50"
+                      >
+                        {fetchingModels ? 'Synchronizing List...' : '🔄 Pull Live OpenRouter Models List'}
+                      </button>
+                    </div>
+
+                    {fetchSuccessMessage && (
+                      <p className="text-[10px] text-zinc-400 bg-zinc-950 p-2 rounded border border-zinc-900 leading-normal font-mono text-center">
+                        {fetchSuccessMessage}
+                      </p>
+                    )}
                   </div>
 
                   {/* API Key Override */}

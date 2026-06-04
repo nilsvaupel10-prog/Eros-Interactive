@@ -4,6 +4,7 @@ export function parseModelResponse(text: string): StoryState {
   let jsonStart = text.lastIndexOf('\`\`\`json');
   let jsonEnd = text.lastIndexOf('\`\`\`');
   let characterStates: CharacterState[] | undefined = undefined;
+  let pornstarStats: any = undefined;
   
   if (jsonStart !== -1 && jsonEnd > jsonStart) {
     const jsonStr = text.substring(jsonStart + 7, jsonEnd).trim();
@@ -11,6 +12,9 @@ export function parseModelResponse(text: string): StoryState {
       const parsedData = JSON.parse(jsonStr);
       if (parsedData.characters && Array.isArray(parsedData.characters)) {
         characterStates = parsedData.characters;
+      }
+      if (parsedData.pornstarStats) {
+        pornstarStats = parsedData.pornstarStats;
       }
     } catch (e) {
       console.warn("Could not parse character states json:", e);
@@ -27,6 +31,11 @@ export function parseModelResponse(text: string): StoryState {
            const parsedData = JSON.parse(jsonStr);
            if (parsedData.characters && Array.isArray(parsedData.characters)) {
                characterStates = parsedData.characters;
+           }
+           if (parsedData.pornstarStats) {
+               pornstarStats = parsedData.pornstarStats;
+           }
+           if (characterStates || pornstarStats) {
                text = text.substring(0, lastBraceStart).trim();
            }
          } catch (e) {
@@ -72,6 +81,6 @@ export function parseModelResponse(text: string): StoryState {
     paragraphs.push(currentPara.trim());
   }
   
-  return { paragraphs, options, characterStates };
+  return { paragraphs, options, characterStates, pornstarStats };
 }
 

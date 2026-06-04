@@ -8,13 +8,22 @@ export interface ChatMessage {
 export interface CharacterState {
   name: string;
   arousal: number; // 0 to 100
+  trust?: number;
+  affinity?: number;
   tags: string[];
+}
+
+export interface PornstarStats {
+  subscribers: number;
+  tips: number;
+  socialMood: string;
 }
 
 export interface StoryState {
   paragraphs: string[];
   options: { id: string, num: string, text: string }[];
   characterStates?: CharacterState[];
+  pornstarStats?: PornstarStats;
 }
 
 export interface CharacterDefinition {
@@ -24,6 +33,7 @@ export interface CharacterDefinition {
   definition: string;
   avatarUrl?: string;
   startingArousal?: number;
+  tags?: string[];
   personality?: {
     assertiveness: number; // Submissive (0) to Dominant (100)
     sociability: number;   // Introvert (0) to Extravert (100)
@@ -37,13 +47,22 @@ export interface CharacterDefinition {
   dickSize?: number;      // None (0) to Massive (100)
 }
 
-export type GameMode = 'standard' | 'free_will';
+export type GameMode = 'standard' | 'free_will' | 'pornstar' | 'sexting' | 'hookup';
+
+export interface GameOptions {
+  consequences: boolean;
+  arousalSpeed: 'slow' | 'normal' | 'fast';
+  narrativeTone: 'romantic' | 'smutty' | 'kinky' | 'story-driven';
+  complianceLevel?: 'compliant' | 'normal' | 'resistant' | 'defiant';
+  arousalDecay?: boolean;
+}
 
 export interface ScenarioContext {
   characters: CharacterDefinition[];
   playerCharacterId: string; // The ID of the character the user is playing, or '3rd_person'
   gameMode: GameMode;
   scenarioDescription: string;
+  options?: GameOptions;
 }
 
 export interface SaveSlot {
@@ -58,5 +77,6 @@ export interface SaveSlot {
   provider: 'gemini' | 'openrouter';
   openRouterModel: string;
   customApiKey?: string;
+  options?: GameOptions;
 }
 
