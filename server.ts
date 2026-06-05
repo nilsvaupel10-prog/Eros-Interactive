@@ -15,7 +15,7 @@ async function startServer() {
   function getGenAIClient(customKey?: string): GoogleGenAI {
     const key = customKey || process.env.GEMINI_API_KEY;
     if (!key) {
-      throw new Error('GEMINI_API_KEY is missing. Please configure it in your secrets setting, or supply your custom key.');
+      throw new Error('GEMINI_API_KEY is missing. Please configure it in your secrets setting, or supply your own custom key.');
     }
     return new GoogleGenAI({ 
       apiKey: key,
@@ -35,6 +35,8 @@ async function startServer() {
       providers: {
         gemini: Boolean(process.env.GEMINI_API_KEY),
         openrouter: Boolean(process.env.OPENROUTER_API_KEY),
+        ollama: Boolean(process.env.OLLAMA_API_URL),
+        nvidia_nim: Boolean(process.env.NVIDIA_NIM_API_KEY),
         mock: true
       }
     });
@@ -50,10 +52,10 @@ async function startServer() {
         return res.status(400).json({ error: 'messages must be a non-empty array' });
       }
 
-      const { messages, scenarioContext, provider = 'gemini', openRouterModel = 'deepseek/deepseek-chat', customApiKey, sessionStats, modelSettings } = req.body; 
+      const { messages, scenarioContext, provider = 'gemini', openRouterModel = 'deepseek/deepseek-chat', customApiKey, sessionStats, modelSettings, ollamaModel = 'llama3', nvidiaModel = 'meta/llama-3.1-70b-instruct' } = req.body; 
       
-      if (!['gemini', 'openrouter', 'mock'].includes(provider)) {
-        return res.status(400).json({ error: 'provider must be one of gemini, openrouter, mock' });
+      if (!['gemini', 'openrouter', 'mock', 'ollama', 'nvidia_nim'].includes(provider)) {
+        return res.status(400).json({ error: 'provider must be one of gemini, openrouter, mock, ollama, nvidia_nim' });
       }
 
       if (provider === 'mock') {
@@ -140,6 +142,80 @@ Here is a typical narrative paragraph testing the UI rendering length. It usuall
         const completion = JSON.parse(textResponse);
         const text = completion.choices?.[0]?.message?.content || '';
         return res.json({ text, model: openRouterModel });
+      }
+
+      if (provider === 'ollama') {
+        const ollamaUrl = process.env.OLLAMA_API_URL || 'http://localhost:11434';
+        const model = ollamaModel;
+        
+        const formattedMessages = [
+          { role: 'system', content: systemPrompt },
+          ...messages.map((m: any) => ({
+            role: m.role === 'model' ? 'assistant' : m.role,
+            content: m.content
+          }))
+        ];
+
+        const response = await fetch(`${ollamaUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model,
+            messages: formattedMessages,
+            stream: false,
+            options: {
+              temperature: modelSettings?.temperature ?? 0.9,
+              top_p: modelSettings?.topP ?? 1.0,
+            }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Ollama API error (Status ${response.status})`);
+        }
+
+        const data = await response.json();
+        const text = data.message?.content || '';
+        return res.json({ text, model });
+      }
+
+      if (provider === 'nvidia_nim') {
+        const apiKey = customApiKey || process.env.NVIDIA_NIM_API_KEY;
+        if (!apiKey) {
+          return res.status(400).json({ error: 'NVIDIA NIM API Key is missing.' });
+        }
+
+        const formattedMessages = [
+          { role: 'system', content: systemPrompt },
+          ...messages.map((m: any) => ({
+            role: m.role === 'model' ? 'assistant' : m.role,
+            content: m.content
+          }))
+        ];
+
+        const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: nvidiaModel,
+            messages: formattedMessages,
+            temperature: modelSettings?.temperature ?? 0.9,
+            top_p: modelSettings?.topP ?? 1.0,
+            max_tokens: 2048
+          })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData?.error?.message || `NVIDIA NIM API error (Status ${response.status})`);
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        return res.json({ text, model: nvidiaModel });
       }
 
       const ai = getGenAIClient(customApiKey);
